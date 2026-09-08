@@ -25,6 +25,18 @@ function ownerMilestoneId(node) {
   return node.kind === 'milestone' ? node.id : node.parentId;
 }
 
+// Aggregates a milestone's own status from its child steps rather than the
+// milestone node's own (often-static) status field, so the badge reflects
+// what's actually happened underneath it.
+function aggregateMilestoneStatus(steps) {
+  if (!steps.length) return { label: 'planned', tone: '' };
+  if (steps.every((step) => passedStatuses.has(step.status))) return { label: 'complete', tone: 'complete' };
+  if (steps.some((step) => step.status === 'blocked')) return { label: 'blocked', tone: 'failed' };
+  if (steps.some((step) => step.status === 'running')) return { label: 'running', tone: 'running' };
+  if (steps.some((step) => step.status === 'review')) return { label: 'review', tone: 'review' };
+  return { label: 'planned', tone: '' };
+}
+
 // For each milestone, finds incoming edges from nodes it does not own (i.e. steps
 // or milestones outside it) and reports whether any such source hasn't passed yet —
 // that's what "gates" this milestone from the rest of the plan.
@@ -137,7 +149,9 @@ export async function initTimeline(container, { project, api, onRunChanged }) {
         <div class="timeline-ruler"><span>Plan</span><span>Build</span><span>Verify</span><span>Review</span></div>
         ${milestones.length ? `<div class="timeline-scroll"><div class="timeline-canvas"><svg class="dependency-svg" aria-hidden="true"></svg>${milestones.map((milestone) => {
           const info = gating.get(milestone.id) || { locked: false, gatingKeys: [] };
-          return `<section class="milestone-lane ${milestoneColorClass(milestone.key)}" data-node-id="${escapeHtml(milestone.id)}"><header><span class="milestone-key">${escapeHtml(milestone.key)}</span><div><h2>${escapeHtml(milestone.title)}</h2><p>${escapeHtml(milestone.description || `${timeline.nodes.filter((node) => node.parentId === milestone.id).length} guided steps`)}</p>${info.locked ? `<p class="mile-gated-tag">Gated by ${escapeHtml(info.gatingKeys.join(', '))}</p>` : ''}</div><span class="badge">${escapeHtml(statusLabel(milestone.status))}</span></header><div class="milestone-steps">${timeline.nodes.filter((node) => node.parentId === milestone.id).map((step) => renderStep(step, timeline)).join('')}</div></section>`;
+          const steps = timeline.nodes.filter((node) => node.parentId === milestone.id);
+          const aggregate = aggregateMilestoneStatus(steps);
+          return `<section class="milestone-lane ${milestoneColorClass(milestone.key)}" data-node-id="${escapeHtml(milestone.id)}"><header><span class="milestone-key">${escapeHtml(milestone.key)}</span><div><h2>${escapeHtml(milestone.title)}</h2><p>${escapeHtml(milestone.description || `${steps.length} guided steps`)}</p>${info.locked ? `<p class="mile-gated-tag">Gated by ${escapeHtml(info.gatingKeys.join(', '))}</p>` : ''}</div><span class="badge"><span class="status-dot ${escapeHtml(aggregate.tone)}"></span>${escapeHtml(aggregate.label)}</span></header><div class="milestone-steps">${steps.map((step) => renderStep(step, timeline)).join('')}</div></section>`;
         }).join('')}</div></div>` : emptyState('TL', 'No timeline yet', 'Describe the outcome above. Claude can propose a dependency-aware plan for review.')}
       </section>`;
 

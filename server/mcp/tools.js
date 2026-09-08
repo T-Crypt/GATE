@@ -175,4 +175,65 @@ export function registerTools(server, services) {
     )
   );
 
+  server.registerTool(
+    'issue_create',
+    {
+      description: 'Create a local issue, bug report, or feature request. Use kind "bug" for a bug report, "feature" for a feature request, or omit for a general task.',
+      inputSchema: {
+        projectId,
+        title: z.string().trim().min(1).max(500),
+        branch: z.string().trim().max(250).optional(),
+        kind: z.enum(['bug', 'feature', 'task']).optional(),
+        idempotencyKey
+      },
+      annotations: { idempotentHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, idempotencyKey: key, ...input }) =>
+      services.dashboard.addIssue(id, input, actorContext(key))
+    )
+  );
+
+  server.registerTool(
+    'issue_update',
+    {
+      description: 'Update the status of a local issue.',
+      inputSchema: {
+        projectId,
+        issueId: z.number().int().positive(),
+        status: z.enum(['open', 'in_progress', 'closed']),
+        idempotencyKey
+      },
+      annotations: { idempotentHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, issueId, status, idempotencyKey: key }) =>
+      services.dashboard.updateIssue(id, issueId, { status }, actorContext(key))
+    )
+  );
+
+  server.registerTool(
+    'note_create',
+    {
+      description: 'Record a local project note with optional tags.',
+      inputSchema: {
+        projectId,
+        body: z.string().trim().min(1).max(10_000),
+        tags: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
+        idempotencyKey
+      },
+      annotations: { idempotentHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, idempotencyKey: key, ...input }) =>
+      services.dashboard.addNote(id, input, actorContext(key))
+    )
+  );
+
+  server.registerTool(
+    'activity_feed',
+    {
+      description: 'Read recent timeline-driven runs and activity for a project, newest first.',
+      inputSchema: { projectId, limit: z.number().int().positive().max(200).optional() },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, limit }) => services.execution.activityFeed(id, limit))
+  );
 }

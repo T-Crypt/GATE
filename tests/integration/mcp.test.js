@@ -45,6 +45,10 @@ test('MCP exposes compact timeline and review tools', async () => {
     assert.ok(names.includes('step_start'));
     assert.ok(names.includes('review_get'));
     assert.ok(names.includes('gate_submit_evidence'));
+    assert.ok(names.includes('issue_create'));
+    assert.ok(names.includes('issue_update'));
+    assert.ok(names.includes('note_create'));
+    assert.ok(names.includes('activity_feed'));
     assert.equal(names.includes('gate_decide'), false);
 
     const result = await fixture.client.callTool({
@@ -96,6 +100,40 @@ test('MCP timeline mutations enforce domain cycle policy', async () => {
     });
     assert.equal(result.isError, true);
     assert.match(result.content[0].text, /TIMELINE_CYCLE/);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test('MCP creates a tagged bug report and reads it back through the activity feed', async () => {
+  const fixture = await setup();
+  try {
+    const created = await fixture.client.callTool({
+      name: 'issue_create',
+      arguments: { projectId: 1, title: 'Crash on save', kind: 'bug', idempotencyKey: 'bug-1' }
+    });
+    assert.equal(created.isError, undefined);
+    assert.equal(created.structuredContent.title, 'Crash on save');
+    assert.deepEqual(created.structuredContent.tags.map((tag) => tag.name), ['bug']);
+
+    const updated = await fixture.client.callTool({
+      name: 'issue_update',
+      arguments: { projectId: 1, issueId: created.structuredContent.id, status: 'closed', idempotencyKey: 'bug-1-close' }
+    });
+    assert.equal(updated.structuredContent.status, 'closed');
+
+    const note = await fixture.client.callTool({
+      name: 'note_create',
+      arguments: { projectId: 1, body: 'Root cause documented', idempotencyKey: 'note-1' }
+    });
+    assert.equal(note.structuredContent.body, 'Root cause documented');
+
+    const feed = await fixture.client.callTool({
+      name: 'activity_feed',
+      arguments: { projectId: 1 }
+    });
+    assert.equal(feed.isError, undefined);
+    assert.deepEqual(feed.structuredContent.runs, []);
   } finally {
     await fixture.cleanup();
   }

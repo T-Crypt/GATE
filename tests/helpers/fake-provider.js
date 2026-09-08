@@ -1,6 +1,7 @@
 export class FakeProvider {
   constructor({ draft, exitCode = 0, delayMs = 0 } = {}) {
     this.requests = [];
+    this.draftRequests = [];
     this.draft = draft;
     this.exitCode = exitCode;
     this.delayMs = delayMs;
@@ -25,7 +26,9 @@ export class FakeProvider {
     };
   }
 
-  async draftTimeline({ goal }) {
+  async draftTimeline(request) {
+    this.draftRequests.push(request);
+    const { goal } = request;
     return this.draft || {
       nodes: [
         { id: 'draft-m', key: 'A', kind: 'milestone', title: goal, ordinal: 0 },

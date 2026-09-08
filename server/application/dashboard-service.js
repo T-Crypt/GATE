@@ -27,19 +27,40 @@ export class DashboardService {
     };
   }
 
+  #issue(row) {
+    return {
+      ...row,
+      tags: this.db.prepare(
+        `SELECT tags.id, tags.name, tags.color FROM tags
+         JOIN issue_tags ON issue_tags.tag_id = tags.id
+         WHERE issue_tags.issue_id = ? ORDER BY tags.name`
+      ).all(row.id)
+    };
+  }
+
   addIssue(projectId, input, context) {
     return runIdempotent(this.db, context, { command: 'dashboard.addIssue', projectId, input }, () => {
       this.projects.get(projectId);
       const title = required(input.title, 'title', 500);
+      const kind = input.kind ? required(input.kind, 'kind', 30) : null;
+      if (kind && !['bug', 'feature', 'task'].includes(kind)) {
+        throw validation('Unknown issue kind', { field: 'kind' });
+      }
       let id;
       this.events.append({
         projectId, type: 'issue.created', actor: context.actor,
-        correlationId: context.correlationId, payload: { title, branch: input.branch || null }
+        correlationId: context.correlationId, payload: { title, branch: input.branch || null, kind }
       }, () => {
         id = Number(this.db.prepare('INSERT INTO issues(project_id, title, branch) VALUES (?, ?, ?)')
           .run(projectId, title, input.branch || null).lastInsertRowid);
+        if (kind) {
+          this.db.prepare('INSERT INTO tags(name) VALUES (?) ON CONFLICT(name) DO NOTHING').run(kind);
+          this.db.prepare(
+            'INSERT INTO issue_tags(issue_id, tag_id) SELECT ?, id FROM tags WHERE name = ?'
+          ).run(id, kind);
+        }
       });
-      return this.db.prepare('SELECT * FROM issues WHERE id = ?').get(id);
+      return this.#issue(this.db.prepare('SELECT * FROM issues WHERE id = ?').get(id));
     });
   }
 
@@ -85,7 +106,9 @@ export class DashboardService {
   async syncGit(projectId, context) {
     const project = this.projects.get(projectId);
     const commits = await this.git.history(project.repoPath, project.baseBranch, 100);
-    return runIdempotent(this.db, context, { command: 'dashboard.syncGit', projectId }, () => {
+    const fileTree = await this.git.fileTree(project.repoPath).catch(() => []);
+    const headSha = commits[0]?.hash || '';
+    const result = runIdempotent(this.db, context, { command: 'dashboard.syncGit', projectId }, () => {
       this.events.append({
         projectId, type: 'git.history.observed', actor: context.actor,
         correlationId: context.correlationId, payload: { branch: project.baseBranch, count: commits.length }
@@ -100,6 +123,26 @@ export class DashboardService {
       });
       return this.db.prepare('SELECT * FROM git_events WHERE project_id = ? ORDER BY committed_at DESC LIMIT 100').all(projectId);
     });
+    this.#refreshDigest(projectId, headSha, fileTree);
+    return result;
+  }
+
+  #refreshDigest(projectId, headSha, fileTree) {
+    const milestones = this.db.prepare(
+      `SELECT display_key, title, description FROM timeline_nodes
+       WHERE project_id = ? AND kind = 'milestone' ORDER BY ordinal`
+    ).all(projectId);
+    this.db.prepare(
+      `INSERT INTO project_digests(project_id, head_sha, file_tree_json, milestones_json, updated_at)
+       VALUES (?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(project_id) DO UPDATE SET
+       head_sha = excluded.head_sha, file_tree_json = excluded.file_tree_json,
+       milestones_json = excluded.milestones_json, updated_at = excluded.updated_at`
+    ).run(projectId, headSha, JSON.stringify(fileTree), JSON.stringify(milestones));
+  }
+
+  getDigest(projectId) {
+    return this.db.prepare('SELECT * FROM project_digests WHERE project_id = ?').get(projectId) || null;
   }
 
   async #gitStatus(project) {

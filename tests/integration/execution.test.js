@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { GitAdapter } from '../../server/adapters/git.js';
 import { ProcessRunner } from '../../server/adapters/providers/process-runner.js';
+import { DashboardService } from '../../server/application/dashboard-service.js';
 import { EventStore } from '../../server/application/event-store.js';
 import { ExecutionService } from '../../server/application/execution-service.js';
 import { ProjectService } from '../../server/application/project-service.js';
@@ -169,6 +170,43 @@ test('a drafted timeline remains proposed until explicitly accepted', async () =
     );
     assert.equal(accepted.status, 'accepted');
     assert.equal(fixture.timeline.get(fixture.project.id).nodes[0].key, 'A');
+  } finally {
+    fixture.close();
+    fixture.gitFixture.close();
+  }
+});
+
+test('activity feed reports runs with their originating step title', async () => {
+  const fixture = setup();
+  try {
+    const runs = await fixture.execution.schedule(fixture.project.id, context('schedule-feed'));
+    assert.equal(runs.length, 1);
+
+    const feed = fixture.execution.activityFeed(fixture.project.id);
+    assert.equal(feed.runs.length, 1);
+    assert.equal(feed.runs[0].nodeTitle, 'Ready work');
+    assert.equal(feed.runs[0].nodeKey, 'A-1');
+  } finally {
+    fixture.close();
+    fixture.gitFixture.close();
+  }
+});
+
+test('drafting a timeline sends the synced project digest as repository context', async () => {
+  const provider = new FakeProvider();
+  const fixture = setup(provider);
+  try {
+    const dashboard = new DashboardService(fixture.db, fixture.events, fixture.projects, new GitAdapter());
+    await dashboard.syncGit(fixture.project.id, context('sync-for-digest'));
+
+    await fixture.execution.draftTimeline(
+      fixture.project.id,
+      'Add a login page',
+      context('draft-with-digest')
+    );
+
+    assert.equal(provider.draftRequests.length, 1);
+    assert.match(provider.draftRequests[0].repositoryContext, /Files:\nREADME\.md/);
   } finally {
     fixture.close();
     fixture.gitFixture.close();

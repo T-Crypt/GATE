@@ -134,6 +134,18 @@ export class GitAdapter {
     return output ? output.split('\n').filter(Boolean) : [];
   }
 
+  async fileTree(repoPath, { ref = 'HEAD', maxEntries = 500 } = {}) {
+    let output;
+    try {
+      output = await git(repoPath, ['ls-tree', '-r', '--name-only', ref]);
+    } catch (error) {
+      if (error.code === 'GIT_COMMAND_FAILED') return [];
+      throw error;
+    }
+    const paths = output ? output.split('\n').filter(Boolean) : [];
+    return paths.slice(0, maxEntries);
+  }
+
   async history(repoPath, branch, limit = 100) {
     const count = Math.max(1, Math.min(Number(limit) || 100, 500));
     const output = await git(repoPath, [

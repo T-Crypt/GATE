@@ -1,5 +1,6 @@
 import { api } from './api.js';
 import { appendLiveActivity, initAgent, renderActivityRail } from './agent.js';
+import { initActivity } from './activity.js';
 import { emptyState, escapeHtml, openDialog, showToast } from './components.js';
 import { initGit } from './git.js';
 import { initIssues } from './issues.js';
@@ -17,6 +18,7 @@ const routes = [
   ['overview', 'OV', 'Overview'],
   ['timeline', 'TL', 'Timeline'],
   ['agent', 'AI', 'Agent'],
+  ['activity', 'AC', 'Activity'],
   ['issues', 'IS', 'Issues'],
   ['git', 'GT', 'Git'],
   ['reviews', 'RV', 'Reviews'],
@@ -90,6 +92,7 @@ function renderView() {
     overview: ['Project signal', 'Project overview', 'Execution, review, and repository health at a glance.'],
     timeline: ['Guided execution', 'Interactive timeline', 'Milestones, dependencies, code gates, visual gates, and approvals.'],
     agent: ['Claude provider', 'Agent control', 'Observe current intent, streamed output, and bounded execution.'],
+    activity: ['Run history', 'Activity', 'Every timeline-driven run against this project, with status and output.'],
     issues: ['Local tracking', 'Issues', 'Small work items linked to branches and timeline context.'],
     git: ['Repository', 'Git activity', 'Commits, branches, and changes observed from this local project.'],
     reviews: ['Human gate', 'Review center', 'Diffs, test evidence, screenshots, decisions, and approvals.'],
@@ -103,6 +106,8 @@ function renderView() {
     void initTimeline(content, { project, api, onRunChanged: async () => refreshActivity() });
   } else if (state.route === 'agent') {
     void initAgent(content, { project, api });
+  } else if (state.route === 'activity') {
+    void initActivity(content, { project, api });
   } else if (state.route === 'reviews') {
     void initReviews(content, { project, api });
   } else if (state.route === 'settings') {
