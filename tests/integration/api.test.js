@@ -20,6 +20,7 @@ function setup() {
     timeline,
     execution: {
       list: () => [],
+      activityFeed: () => ({ runs: [], activity: [] }),
       schedule: async () => [],
       start: async () => {},
       cancel: async () => {},
@@ -75,6 +76,23 @@ test('project creation returns a versioned data envelope', async () => {
   } finally {
     fixture.close();
     gitFixture.close();
+  }
+});
+
+test('activity feed route returns the execution service payload', async () => {
+  const fixture = setup();
+  try {
+    fixture.services.execution.activityFeed = (projectId, limit) => ({
+      runs: [{ id: 'run-1', projectId, nodeTitle: 'Step', nodeKey: 'A-1' }],
+      activity: [],
+      limit
+    });
+    const response = await request(fixture.app).get('/api/v1/projects/1/activity?limit=10');
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.runs[0].nodeTitle, 'Step');
+    assert.equal(response.body.data.limit, 10);
+  } finally {
+    fixture.close();
   }
 });
 

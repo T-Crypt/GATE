@@ -5,7 +5,8 @@ import { commandContext, data, requireIdempotency } from './middleware.js';
 
 const issueInput = z.object({
   title: z.string().trim().min(1).max(500),
-  branch: z.string().trim().max(250).nullable().optional()
+  branch: z.string().trim().max(250).nullable().optional(),
+  kind: z.enum(['bug', 'feature', 'task']).optional()
 });
 const issueUpdate = z.object({ status: z.enum(['open', 'in_progress', 'closed']) });
 const noteInput = z.object({

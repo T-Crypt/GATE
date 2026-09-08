@@ -90,6 +90,12 @@ test('shows cross-milestone gates and follows live execution', async ({ page, re
   await page.getByRole('button', { name: 'Run A-2' }).click();
   await expect(page.getByTestId('node-step-a-2')).toHaveAttribute('data-status', /running|review/);
   await expect(page.getByRole('complementary', { name: 'Agent activity' })).toContainText('A-2');
+
+  const milestoneA = page.locator('.milestone-lane[data-node-id="milestone-a"]');
+  await expect(milestoneA.locator('.badge')).toContainText(/running|review/);
+
+  await page.goto('/#/activity');
+  await expect(page.getByText('A-2 · Build event policy')).toBeVisible();
 });
 
 test('review center refuses stale evidence and explains why', async ({ page, request }) => {

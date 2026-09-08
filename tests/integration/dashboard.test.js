@@ -32,3 +32,27 @@ test('dashboard commands persist local issues, tagged notes, and observed commit
     git.close();
   }
 });
+
+test('adding an issue with a kind tags it, and syncing git refreshes the project digest', async () => {
+  const database = createTestDatabase();
+  const git = createGitFixture();
+  try {
+    const events = new EventStore(database.db);
+    const projects = new ProjectService(database.db, events);
+    const project = projects.create({ name: 'Digest', repoPath: git.repoPath }, context('project'));
+    const dashboard = new DashboardService(database.db, events, projects, new GitAdapter());
+
+    const bug = dashboard.addIssue(project.id, { title: 'Crash on save', kind: 'bug' }, context('bug'));
+    assert.deepEqual(bug.tags.map((tag) => tag.name), ['bug']);
+
+    assert.equal(dashboard.getDigest(project.id), null);
+    await dashboard.syncGit(project.id, context('sync'));
+    const digest = dashboard.getDigest(project.id);
+    assert.ok(digest);
+    assert.deepEqual(JSON.parse(digest.file_tree_json), ['README.md']);
+    assert.equal(JSON.parse(digest.milestones_json).length, 0);
+  } finally {
+    database.close();
+    git.close();
+  }
+});

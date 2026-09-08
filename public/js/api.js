@@ -44,6 +44,7 @@ export const api = {
   schedule: (projectId) => request(`/projects/${projectId}/runs/schedule`, { method: 'POST', body: {} }),
   cancelRun: (runId) => request(`/runs/${runId}/cancel`, { method: 'POST', body: {} }),
   getRuns: (projectId) => request(`/projects/${projectId}/runs`),
+  getActivityFeed: (projectId) => request(`/projects/${projectId}/activity`),
   getReview: (projectId) => request(`/projects/${projectId}/review`),
   submitEvidence: (projectId, gateId, input) => request(`/projects/${projectId}/gates/${gateId}/evidence`, { method: 'POST', body: input }),
   decideGate: (projectId, gateId, input) => request(`/projects/${projectId}/gates/${gateId}/decisions`, { method: 'POST', body: input }),

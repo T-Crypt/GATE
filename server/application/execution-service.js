@@ -32,6 +32,19 @@ function internalContext(context, suffix, actor = context.actor) {
   };
 }
 
+function buildRepositoryContext(project, digest) {
+  const base = `Repository ${project.repoPath}; base ${project.baseBranch}`;
+  if (!digest) return base;
+  const files = JSON.parse(digest.file_tree_json);
+  const milestones = JSON.parse(digest.milestones_json);
+  const parts = [base];
+  if (files.length) parts.push(`Files:\n${files.join('\n')}`);
+  if (milestones.length) {
+    parts.push(`Existing milestones:\n${milestones.map((m) => `${m.display_key || ''} ${m.title}`.trim()).join('\n')}`);
+  }
+  return parts.join('\n\n');
+}
+
 export class ExecutionService {
   constructor({
     db,
@@ -216,10 +229,11 @@ export class ExecutionService {
         status: 422
       });
     }
+    const digest = this.db.prepare('SELECT * FROM project_digests WHERE project_id = ?').get(projectId) || null;
     const graph = normalizeTimelineGraph(
       await provider.draftTimeline({
         goal: String(goal ?? '').trim(),
-        repositoryContext: `Repository ${project.repoPath}; base ${project.baseBranch}`,
+        repositoryContext: buildRepositoryContext(project, digest),
         cwd: project.repoPath
       })
     );
@@ -308,6 +322,24 @@ export class ExecutionService {
       .prepare('SELECT * FROM runs WHERE project_id = ? ORDER BY started_at DESC LIMIT ?')
       .all(projectId, Math.max(1, Math.min(limit, 100)))
       .map(decodeRun);
+  }
+
+  activityFeed(projectId, limit = 50) {
+    const capped = Math.max(1, Math.min(limit, 200));
+    const runs = this.db
+      .prepare(
+        `SELECT runs.*, timeline_nodes.title AS node_title, timeline_nodes.display_key AS node_key
+         FROM runs
+         LEFT JOIN timeline_nodes ON timeline_nodes.id = runs.node_id
+         WHERE runs.project_id = ?
+         ORDER BY runs.started_at DESC LIMIT ?`
+      )
+      .all(projectId, capped)
+      .map((row) => ({ ...decodeRun(row), nodeTitle: row.node_title, nodeKey: row.node_key }));
+    const activity = this.db
+      .prepare('SELECT * FROM activity WHERE project_id = ? ORDER BY id DESC LIMIT ?')
+      .all(projectId, capped);
+    return { runs, activity };
   }
 
   #recordOutput(runId, projectId, chunk, stream) {

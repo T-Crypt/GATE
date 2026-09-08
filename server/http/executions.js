@@ -8,6 +8,9 @@ export function executionsRouter(execution) {
   router.get('/projects/:projectId/runs', (req, res) =>
     data(res, execution.list(Number(req.params.projectId)))
   );
+  router.get('/projects/:projectId/activity', (req, res) =>
+    data(res, execution.activityFeed(Number(req.params.projectId), Number(req.query.limit) || undefined))
+  );
   router.get('/runs/:runId', (req, res) => data(res, execution.get(req.params.runId)));
   router.post('/projects/:projectId/runs/schedule', requireIdempotency, async (req, res) =>
     data(res, await execution.schedule(Number(req.params.projectId), commandContext(req)), 202)
