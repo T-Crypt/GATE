@@ -79,6 +79,30 @@ test('project creation returns a versioned data envelope', async () => {
   }
 });
 
+test('project creation accepts empty optional branch fields from an unfilled form', async () => {
+  const gitFixture = createGitFixture();
+  const fixture = setup();
+  try {
+    const response = await request(fixture.app)
+      .post('/api/v1/projects')
+      .set('Idempotency-Key', 'create-project-empty-branches')
+      .send({
+        name: 'Minimal',
+        repoPath: gitFixture.repoPath,
+        baseBranch: 'main',
+        stableBranch: '',
+        productionBranch: ''
+      });
+
+    assert.equal(response.status, 201);
+    assert.equal(response.body.data.stableBranch, null);
+    assert.equal(response.body.data.productionBranch, null);
+  } finally {
+    fixture.close();
+    gitFixture.close();
+  }
+});
+
 test('activity feed route returns the execution service payload', async () => {
   const fixture = setup();
   try {

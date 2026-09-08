@@ -3,7 +3,10 @@ import { z } from 'zod';
 
 import { commandContext, data, requireIdempotency } from './middleware.js';
 
-const branch = z.string().trim().min(1).max(250).nullable().optional();
+const branch = z.preprocess(
+  (value) => (value === '' ? undefined : value),
+  z.string().trim().min(1).max(250).nullable().optional()
+);
 const projectInput = z.object({
   name: z.string().trim().min(1).max(120),
   repoPath: z.string().trim().min(1).max(4096),

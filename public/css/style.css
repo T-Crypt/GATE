@@ -31,6 +31,15 @@
   font-synthesis: none;
 }
 
+/* Accent color: swaps the primary --cyan role. Status colors (green/amber/red)
+   are semantic and stay fixed regardless of accent choice. */
+:root[data-accent="blue"] { --cyan: #5b9dff; --cyan-soft: rgba(91, 157, 255, 0.14); }
+:root[data-accent="purple"] { --cyan: #b083ff; --cyan-soft: rgba(176, 131, 255, 0.14); }
+:root[data-accent="green"] { --cyan: #5fe0a0; --cyan-soft: rgba(95, 224, 160, 0.14); }
+:root[data-accent="orange"] { --cyan: #ff9d5c; --cyan-soft: rgba(255, 157, 92, 0.14); }
+:root[data-accent="pink"] { --cyan: #ff85c2; --cyan-soft: rgba(255, 133, 194, 0.14); }
+:root[data-accent="red"] { --cyan: #ff6b6b; --cyan-soft: rgba(255, 107, 107, 0.14); }
+
 * { box-sizing: border-box; }
 html, body { min-height: 100%; }
 body {
@@ -315,6 +324,16 @@ input::placeholder,textarea::placeholder { color: var(--faint); }
 .review-note { min-height: 76px; margin-top: 6px; }
 .review-actions { margin-top: 10px; }
 .settings-copy { color: var(--muted); font-size: 11px; }
+.accent-swatches { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.accent-swatch { width: 30px; height: 30px; padding: 0; border: 2px solid transparent; border-radius: 50%; background: var(--swatch); cursor: pointer; }
+.accent-swatch[aria-checked="true"] { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--swatch); }
+.accent-swatch.accent-cyan { --swatch: #64d8ff; }
+.accent-swatch.accent-blue { --swatch: #5b9dff; }
+.accent-swatch.accent-purple { --swatch: #b083ff; }
+.accent-swatch.accent-green { --swatch: #5fe0a0; }
+.accent-swatch.accent-orange { --swatch: #ff9d5c; }
+.accent-swatch.accent-pink { --swatch: #ff85c2; }
+.accent-swatch.accent-red { --swatch: #ff6b6b; }
 .protected-list { display: grid; gap: 7px; }
 .protected-row { display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.018); }
 .protected-row input { width: 16px; min-height: 16px; accent-color: var(--green); }

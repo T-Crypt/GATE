@@ -71,3 +71,29 @@ test('worktree creation refuses a dirty base checkout', async () => {
     fixture.close();
   }
 });
+
+test('an uncommitted .gitignore change that is only Gate\'s own .gate/ entry does not count as dirty', async () => {
+  const fixture = createGitFixture();
+  const git = new GitAdapter();
+  fixture.write('.gitignore', '# Gate local project state (not shared by default)\n.gate/\n');
+
+  try {
+    const inspected = await git.inspect(fixture.repoPath);
+    assert.equal(inspected.dirty, false);
+  } finally {
+    fixture.close();
+  }
+});
+
+test('a hand-edited .gitignore with unrelated changes still counts as dirty', async () => {
+  const fixture = createGitFixture();
+  const git = new GitAdapter();
+  fixture.write('.gitignore', 'node_modules/\n# Gate local project state (not shared by default)\n.gate/\n');
+
+  try {
+    const inspected = await git.inspect(fixture.repoPath);
+    assert.equal(inspected.dirty, true);
+  } finally {
+    fixture.close();
+  }
+});
