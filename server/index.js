@@ -1,53 +1,60 @@
-import express from 'express';
-import { WebSocketServer } from 'ws';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import http from 'node:http';
+import fs from 'node:fs';
+import pino from 'pino';
 
-import dashboardRoutes from './routes/dashboard.js';
-import agentRoutes from './routes/agent.js';
-import timelineRoutes from './routes/timeline.js';
-import { attachSubscriber, detachSubscriber } from './agent/bridge.js';
+import { createHttpServer } from './adapters/live-events.js';
+import { createApp } from './app.js';
+import { buildServices } from './composition.js';
+import { loadConfig } from './config.js';
+import { openDatabase } from './db/database.js';
+import { migrate } from './db/migrate.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const app = express();
+const config = loadConfig();
+fs.mkdirSync(config.dataDir, { recursive: true });
+fs.mkdirSync(config.validationDir, { recursive: true });
+fs.mkdirSync(config.worktreeDir, { recursive: true });
 
-app.use(express.json());
-app.use(express.static(path.join(__dirname, '..', 'public')));
+const logger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  redact: {
+    paths: ['req.headers.authorization', '*.token', '*.secret', '*.password', '*.apiKey'],
+    censor: '[REDACTED]'
+  }
+});
+const db = openDatabase({ filename: config.databaseFile });
+const migrationVersion = migrate(db);
+const services = buildServices({ db, config });
+const recovered = services.execution.recoverInterrupted();
+const app = createApp({ services, config, logger });
+const server = createHttpServer({ app, eventStore: services.events });
 
-app.use('/api', dashboardRoutes);
-app.use('/api', agentRoutes);
-app.use('/api', timelineRoutes);
+if (config.allowRemoteBind) {
+  logger.warn({ host: config.host }, 'Project MCP is configured beyond loopback');
+}
+if (recovered.length > 0) {
+  logger.warn({ recoveredRuns: recovered.map((run) => run.id) }, 'Interrupted runs require review');
+}
 
-const server = http.createServer(app);
-
-// WS protocol: client sends { type: 'subscribe', sessionId } to attach to a live
-// agent session's output stream. Server pushes { type: 'agent_output' | 'agent_closed', ... }.
-const wss = new WebSocketServer({ server, path: '/ws' });
-
-wss.on('connection', (ws) => {
-  const subscribedSessions = new Set();
-
-  ws.on('message', (raw) => {
-    let msg;
-    try { msg = JSON.parse(raw.toString()); } catch { return; }
-
-    if (msg.type === 'subscribe' && msg.sessionId) {
-      attachSubscriber(msg.sessionId, ws);
-      subscribedSessions.add(msg.sessionId);
-    }
-    if (msg.type === 'unsubscribe' && msg.sessionId) {
-      detachSubscriber(msg.sessionId, ws);
-      subscribedSessions.delete(msg.sessionId);
-    }
-  });
-
-  ws.on('close', () => {
-    for (const sessionId of subscribedSessions) detachSubscriber(sessionId, ws);
-  });
+server.listen(config.port, config.host, () => {
+  logger.info(
+    { host: config.host, port: config.port, migrationVersion },
+    'Project MCP workstation is ready'
+  );
 });
 
-const PORT = process.env.PORT || 4177;
-server.listen(PORT, () => {
-  console.log(`project-tracker running on http://localhost:${PORT}`);
-});
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info({ signal }, 'Stopping Project MCP');
+  const forceTimer = setTimeout(() => process.exit(1), 10_000);
+  forceTimer.unref();
+  server.close(() => {
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    db.close();
+    clearTimeout(forceTimer);
+    process.exit(0);
+  });
+}
+
+process.once('SIGINT', () => shutdown('SIGINT'));
+process.once('SIGTERM', () => shutdown('SIGTERM'));

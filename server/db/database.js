@@ -1,5 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 
+const transactionState = new WeakMap();
+
 export function openDatabase({ filename }) {
   const db = new DatabaseSync(filename);
   db.exec('PRAGMA foreign_keys = ON');
@@ -9,15 +11,28 @@ export function openDatabase({ filename }) {
 }
 
 export function withTransaction(db, operation) {
-  if (db.isTransaction) return operation();
+  const active = transactionState.get(db);
+  if (active) return operation();
 
+  const state = { afterCommit: [] };
+  transactionState.set(db, state);
   db.exec('BEGIN IMMEDIATE');
+  let result;
   try {
-    const result = operation();
+    result = operation();
     db.exec('COMMIT');
-    return result;
   } catch (error) {
     db.exec('ROLLBACK');
+    transactionState.delete(db);
     throw error;
   }
+  transactionState.delete(db);
+  for (const callback of state.afterCommit) callback();
+  return result;
+}
+
+export function afterCommit(db, callback) {
+  const active = transactionState.get(db);
+  if (active) active.afterCommit.push(callback);
+  else callback();
 }
