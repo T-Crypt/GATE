@@ -12,6 +12,8 @@ author:
 nav_list:
   - title: Overview
     url: /GATE/
+  - title: Setup
+    url: /GATE/docs/setup/
   - title: Architecture
     url: /GATE/docs/architecture/
   - title: Providers

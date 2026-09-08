@@ -17,8 +17,7 @@ The name is literal. The core domain object is the **gate**: a checkpoint a step
 - **Ties evidence to a commit.** Gate binds evidence submitted against a gate to a specific commit SHA and file scope. If the branch moves or a file in that scope changes afterward, the evidence goes stale and can no longer satisfy the gate. Approval gates require a decision from a human actor; Gate rejects an agent that tries to approve its own work.
 - **Records every command as an event.** Each command appends an ordered, immutable event and updates its read model in one transaction. That event stream also drives the live UI over WebSocket. A client that drops and reconnects gets replayed exactly the events it missed, no gaps or duplicates.
 - **Shows you the whole plan at once.** The timeline view renders a mile-marker rail across the top: one colored badge per milestone, connected by a track, showing which milestones are gating which. Each milestone's lane carries the same color as its marker, so the overview and the detail stay visually tied together.
-- **Keeps a copy in your repo.** Gate mirrors each project's timeline, issues, and notes into `<repo>/.gate/` as plain JSON and Markdown, refreshed on every change. Commit and push them the way you would any other file, and this data travels with the repo instead of living only in Gate's local database.
-- **Onboards the agent.** Gate ships a Claude skill (`.claude/skills/gate/SKILL.md`) and can install it into any connected repository — from the Settings page, the HTTP API, or MCP's `skills_install` tool. The skill tells an agent how to work in a Gate-managed repo: use Gate's MCP tools for timelines, steps, runs, and gates; submit commit-bound evidence; never approve your own gate.
+- **Keeps a copy in your repo.** Gate mirrors each project's timeline, issues, and notes into `<repo>/.gate/` as plain JSON and Markdown, refreshed on every change. The mirror is ignored by default — Gate appends a `.gate/` entry to the project's `.gitignore` when it first connects — but remove that entry and the data travels with the repo instead of living only in Gate's local database.
 - **Speaks MCP too.** The same application services run over stdio for any MCP client. An agent can report evidence, but it cannot approve its own gate — there is deliberately no approval tool over MCP.
 
 ## Safety contract
@@ -42,6 +41,7 @@ Open `http://127.0.0.1:4177`, connect an existing Git repository, describe a goa
 
 ## Documentation
 
+- [Setup & Operations]({{ site.baseurl }}/docs/setup/) — requirements, npm scripts, environment variables, data layout, and backups
 - [Architecture]({{ site.baseurl }}/docs/architecture/) — process layout, domain/adapter boundary, execution flow
 - [Provider adapters]({{ site.baseurl }}/docs/providers/) — the Claude adapter and the provider contract
 - [MCP interface]({{ site.baseurl }}/docs/mcp/) — tools, idempotency keys, and what is deliberately absent
