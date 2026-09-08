@@ -15,6 +15,10 @@ docs/superpowers/
 .claude-plans/
 CLAUDE.local.md
 
+# Local agent orientation for working on Gate's own source (opencode, Codex, local
+# models) — not the .claude/skills/gate/SKILL.md Gate ships into OTHER projects
+AGENTS.md
+
 # Jekyll site build output (built by GitHub Actions, not committed)
 site/_site/
 site/.jekyll-cache/
