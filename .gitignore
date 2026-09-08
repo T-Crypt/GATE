@@ -14,3 +14,7 @@ docs/superpowers/
 .claude/
 .claude-plans/
 CLAUDE.local.md
+
+# Jekyll site build output (built by GitHub Actions, not committed)
+site/_site/
+site/.jekyll-cache/

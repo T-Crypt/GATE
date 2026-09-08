@@ -1,0 +1,24 @@
+title: Gate
+description: A localhost-first control plane for human-reviewed AI development. Claude proposes a timeline of gated steps, you approve it, and only then does anything run.
+theme: minima
+url: "https://t-crypt.github.io"
+baseurl: "/GATE"
+repository: "T-Crypt/GATE"
+author:
+  name: Trevin Tindall
+  github: T-Crypt
+
+# Navigation links (paths include the project-page baseurl)
+nav_list:
+  - title: Overview
+    url: /GATE/
+  - title: Architecture
+    url: /GATE/docs/architecture/
+  - title: Providers
+    url: /GATE/docs/providers/
+  - title: MCP
+    url: /GATE/docs/mcp/
+  - title: Events
+    url: /GATE/docs/events/
+  - title: Troubleshooting
+    url: /GATE/docs/troubleshooting/
