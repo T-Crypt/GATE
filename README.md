@@ -22,7 +22,7 @@ The name is literal. The core domain object is the gate: a checkpoint a step mus
 
 **Keeps a copy in your repo.** Gate mirrors each project's timeline, issues, and notes into `<repo>/.gate/` as plain JSON and Markdown, refreshed on every change. These are ordinary tracked files. Commit and push them the way you would any other file, and this data travels with the repo instead of living only in Gate's local database.
 
-**Speaks MCP too.** The same application services run over stdio for any MCP client. Read tools list projects, timelines, runs, and review bundles. Mutation tools require an idempotency key and can draft or accept timelines, start or cancel steps, and submit evidence. There is deliberately no approval tool and no merge, push, or protected-branch mutation tool over MCP: an agent can report evidence, but it cannot approve its own gate.
+**Speaks MCP too.** The same application services run over stdio for any MCP client. Read tools list projects, timelines, runs, review bundles, and the recent activity feed. Mutation tools require an idempotency key and can draft or accept timelines, start, schedule, or cancel steps, submit evidence, create or update issues, and add notes. There is deliberately no approval tool and no merge, push, or protected-branch mutation tool over MCP: an agent can report evidence, but it cannot approve its own gate.
 
 ## Safety contract
 

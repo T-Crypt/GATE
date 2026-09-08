@@ -14,12 +14,19 @@ const timelineSchema = {
   }
 };
 
+function isEmptyObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0;
+}
+
 function parseStructuredOutput(output) {
   let envelope;
   try {
     envelope = JSON.parse(output);
   } catch {
     throw new AppError('PROVIDER_OUTPUT_INVALID', 'Claude returned invalid JSON', { status: 502 });
+  }
+  if (envelope.is_error) {
+    throw new AppError('PROVIDER_FAILED', envelope.result || 'Claude reported an error', { status: 502 });
   }
   const value = envelope.structured_output ?? envelope.result ?? envelope;
   if (typeof value === 'string') {
@@ -30,6 +37,13 @@ function parseStructuredOutput(output) {
         status: 502
       });
     }
+  }
+  if (isEmptyObject(value)) {
+    throw new AppError(
+      'PROVIDER_OUTPUT_INCOMPLETE',
+      'Claude finished without producing a timeline. Try rephrasing the goal or retry the draft.',
+      { status: 502 }
+    );
   }
   return value;
 }
@@ -89,7 +103,14 @@ export class ClaudeProvider {
           '--json-schema',
           JSON.stringify(timelineSchema),
           '--permission-mode',
-          'acceptEdits'
+          'acceptEdits',
+          // Drafting reasons over the goal and repositoryContext text only; it never
+          // needs filesystem or shell access. Disabling tools keeps the model from
+          // wandering into open-ended exploration and guarantees it returns the
+          // schema-constrained result directly instead of stopping mid tool-call
+          // with an empty structured_output.
+          '--tools',
+          ''
         ],
         cwd,
         input: prompt,
