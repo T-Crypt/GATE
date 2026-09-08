@@ -127,6 +127,18 @@ export class GitAdapter {
     return output ? output.split('\n').filter(Boolean) : [];
   }
 
+  async history(repoPath, branch, limit = 100) {
+    const count = Math.max(1, Math.min(Number(limit) || 100, 500));
+    const output = await git(repoPath, [
+      'log', branch, `-${count}`, '--date=iso-strict',
+      '--pretty=format:%H%x1f%an%x1f%s%x1f%aI%x1e'
+    ]);
+    return output.split('\x1e').map((record) => record.trim()).filter(Boolean).map((record) => {
+      const [hash, author, message, committedAt] = record.split('\x1f');
+      return { hash, author, message, committedAt };
+    });
+  }
+
   async removeRunWorktree(worktree, { force = false } = {}) {
     const actual = await this.inspect(worktree.path);
     if (actual.dirty && !force) {

@@ -151,4 +151,28 @@ export function registerTools(server, services) {
     },
     handler(({ projectId: id }) => services.reviews.get(id))
   );
+
+  server.registerTool(
+    'gate_submit_evidence',
+    {
+      description: 'Attach commit-bound local evidence to a timeline gate.',
+      inputSchema: {
+        projectId,
+        gateId: z.string().trim().min(1).max(200),
+        kind: z.string().trim().min(1).max(80),
+        headSha: z.string().trim().min(1).max(256),
+        fileScope: z.array(z.string().trim().min(1).max(4096)).max(250).default([]),
+        command: z.string().trim().max(4096).optional(),
+        exitCode: z.number().int().optional(),
+        output: z.string().max(100_000).default(''),
+        artifactPath: z.string().trim().max(4096).optional(),
+        idempotencyKey
+      },
+      annotations: { idempotentHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, gateId, idempotencyKey: key, ...input }) =>
+      services.reviews.submitEvidence(id, gateId, input, actorContext(key))
+    )
+  );
+
 }

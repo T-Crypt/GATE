@@ -21,12 +21,13 @@ export function buildServices({ db, config, providers }) {
         })
       ]
     ]);
+  const gitAdapter = new GitAdapter();
   const execution = new ExecutionService({
     db,
     eventStore: events,
     projectService: projects,
     timelineService: timeline,
-    gitAdapter: new GitAdapter(),
+    gitAdapter,
     providers: providerMap,
     worktreeDir: config.worktreeDir,
     outputLimitBytes: config.outputLimitBytes
@@ -38,8 +39,8 @@ export function buildServices({ db, config, providers }) {
     projects,
     timeline,
     execution,
-    reviews: new ReviewService(db),
-    dashboard: new DashboardService(db),
+    reviews: new ReviewService(db, events),
+    dashboard: new DashboardService(db, events, projects, gitAdapter),
     providers: providerMap
   };
 }

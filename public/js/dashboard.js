@@ -1,127 +1,66 @@
-export async function initDashboard(projectId) {
-  const panel = document.getElementById('tab-dashboard');
-  panel.innerHTML = `
-    <div class="grid-cols">
-      <div>
-        <div class="card">
-          <h3>Git Activity <button class="ghost" id="syncBtn" style="float:right;padding:2px 10px;">Sync</button></h3>
-          <div id="gitList"></div>
-        </div>
-        <div class="card">
-          <h3>Issues</h3>
-          <div style="display:flex;gap:8px;margin-bottom:10px;">
-            <input type="text" id="issueTitle" placeholder="New issue title" />
-            <button class="primary" id="addIssueBtn">Add</button>
-          </div>
-          <div id="issueList"></div>
-        </div>
-      </div>
-      <div>
-        <div class="card">
-          <h3>Notes</h3>
-          <textarea id="noteBody" rows="3" placeholder="Note (comma-separated tags after ::)  e.g. Fixed VPN cert renewal :: infra, aea"></textarea>
-          <div style="margin-top:8px;"><button class="primary" id="addNoteBtn">Add note</button></div>
-          <div id="noteList" style="margin-top:12px;"></div>
-        </div>
-      </div>
-    </div>
-  `;
+import { emptyState, escapeHtml, showToast } from './components.js';
 
-  const gitList = document.getElementById('gitList');
-  const issueList = document.getElementById('issueList');
-  const noteList = document.getElementById('noteList');
-
-  async function loadGit() {
-    const events = await (await fetch(`/api/projects/${projectId}/git/events`)).json();
-    gitList.innerHTML = events.length
-      ? events.map(e => `
-        <div class="list-row">
-          <span class="hash">${e.commit_hash.slice(0, 7)}</span>
-          <span>${escapeHtml(e.message)}</span>
-          <span class="muted" style="margin-left:auto;">${e.author} · ${e.branch}</span>
-        </div>`).join('')
-      : `<div class="muted">No cached commits. Hit Sync.</div>`;
-  }
-
-  async function loadIssues() {
-    const issues = await (await fetch(`/api/projects/${projectId}/issues`)).json();
-    issueList.innerHTML = issues.length
-      ? issues.map(i => `
-        <div class="list-row">
-          <span class="badge ${i.status}">${i.status}</span>
-          <span>${escapeHtml(i.title)}</span>
-          <select class="issue-status" data-id="${i.id}" style="margin-left:auto;font-size:11px;">
-            <option value="open" ${i.status === 'open' ? 'selected' : ''}>open</option>
-            <option value="in_progress" ${i.status === 'in_progress' ? 'selected' : ''}>in_progress</option>
-            <option value="closed" ${i.status === 'closed' ? 'selected' : ''}>closed</option>
-          </select>
-        </div>`).join('')
-      : `<div class="muted">No issues yet.</div>`;
-
-    issueList.querySelectorAll('.issue-status').forEach(sel => {
-      sel.addEventListener('change', async () => {
-        await fetch(`/api/issues/${sel.dataset.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: sel.value })
-        });
-        loadIssues();
-      });
-    });
-  }
-
-  async function loadNotes() {
-    const notes = await (await fetch(`/api/projects/${projectId}/notes`)).json();
-    noteList.innerHTML = notes.length
-      ? notes.map(n => `
-        <div class="list-row" style="flex-direction:column;align-items:flex-start;">
-          <div>${escapeHtml(n.body)}</div>
-          <div style="margin-top:4px;">${n.tags.map(t => `<span class="tag">${escapeHtml(t.name)}</span>`).join('')}
-            <span class="muted" style="margin-left:6px;">${n.created_at}</span>
-          </div>
-        </div>`).join('')
-      : `<div class="muted">No notes yet.</div>`;
-  }
-
-  document.getElementById('syncBtn').addEventListener('click', async () => {
-    await fetch(`/api/projects/${projectId}/git/sync`, { method: 'POST' });
-    loadGit();
-  });
-
-  document.getElementById('addIssueBtn').addEventListener('click', async () => {
-    const input = document.getElementById('issueTitle');
-    if (!input.value.trim()) return;
-    await fetch(`/api/projects/${projectId}/issues`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: input.value.trim() })
-    });
-    input.value = '';
-    loadIssues();
-  });
-
-  document.getElementById('addNoteBtn').addEventListener('click', async () => {
-    const textarea = document.getElementById('noteBody');
-    const raw = textarea.value.trim();
-    if (!raw) return;
-    const [body, tagPart] = raw.split('::');
-    const tags = tagPart ? tagPart.split(',').map(t => t.trim()).filter(Boolean) : [];
-    await fetch(`/api/projects/${projectId}/notes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: body.trim(), tags })
-    });
-    textarea.value = '';
-    loadNotes();
-  });
-
-  loadGit();
-  loadIssues();
-  loadNotes();
+function metric(label, value, tone = '') {
+  return `<article class="panel metric ${tone}"><span class="metric-label">${escapeHtml(label)}</span><strong class="metric-value">${escapeHtml(value)}</strong></article>`;
 }
 
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, s => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[s]));
+export async function initDashboard(container, { project, api, focus = 'overview' }) {
+  container.innerHTML = '<div class="timeline-loading"><div class="loading-orbit"></div>Loading local project signal…</div>';
+  try {
+    const model = await api.getDashboard(project.id);
+    const { metrics = {}, issues = [], notes = [], gitEvents = [] } = model;
+    container.innerHTML = `
+      <div class="placeholder-grid dashboard-metrics">
+        ${metric('Active runs', metrics.activeRuns || 0, 'cyan')}
+        ${metric('Blocked gates', metrics.blockedGates || 0, metrics.blockedGates ? 'amber' : '')}
+        ${metric('Review queue', metrics.reviewQueue || 0, metrics.reviewQueue ? 'violet' : '')}
+        ${metric('Open issues', metrics.openIssues || 0)}
+      </div>
+      <div class="operations-grid">
+        <article class="panel" id="issuesPanel">
+          <div class="panel-header"><div><p class="eyebrow">Local tracker</p><h2>Issues</h2></div></div>
+          <div class="panel-body"><form class="inline-form" id="issueForm"><label class="sr-only" for="issueTitle">New issue</label><input id="issueTitle" placeholder="Capture a local work item" maxlength="500" required><button class="button primary">Add issue</button></form><div class="record-list">${issues.length ? issues.map((issue) => `<div class="record-row"><span class="status-dot ${escapeHtml(issue.status)}"></span><strong>${escapeHtml(issue.title)}</strong><label class="sr-only" for="issue-${issue.id}">Issue status</label><select id="issue-${issue.id}" class="compact-select issue-status" data-id="${issue.id}"><option value="open" ${issue.status === 'open' ? 'selected' : ''}>open</option><option value="in_progress" ${issue.status === 'in_progress' ? 'selected' : ''}>in progress</option><option value="closed" ${issue.status === 'closed' ? 'selected' : ''}>closed</option></select></div>`).join('') : emptyState('IS', 'No open issues', 'Capture decisions and small follow-up work without leaving the workstation.')}</div></div>
+        </article>
+        <article class="panel" id="gitPanel">
+          <div class="panel-header"><div><p class="eyebrow">Observed only</p><h2>Git activity</h2></div><button class="button" id="syncGit">Sync ${escapeHtml(project.baseBranch)}</button></div>
+          <div class="panel-body record-list">${gitEvents.length ? gitEvents.slice(0, 12).map((commit) => `<div class="commit-row"><code>${escapeHtml(commit.commit_hash.slice(0, 8))}</code><div><strong>${escapeHtml(commit.message)}</strong><p>${escapeHtml(commit.author || 'unknown')} · ${escapeHtml(commit.committed_at || '')}</p></div></div>`).join('') : emptyState('GT', 'No cached commits', 'Sync reads local Git history. It never pushes or changes a branch.')}</div>
+        </article>
+        <article class="panel notes-panel">
+          <div class="panel-header"><div><p class="eyebrow">Project memory</p><h2>Notes</h2></div></div>
+          <div class="panel-body"><form class="form-grid" id="noteForm"><label class="sr-only" for="noteBody">New note</label><textarea id="noteBody" placeholder="Record an architectural decision or review note" required></textarea><label class="sr-only" for="noteTags">Tags</label><input id="noteTags" placeholder="tags, separated, by commas"><button class="button primary">Save local note</button></form><div class="record-list note-list">${notes.length ? notes.map((note) => `<div class="note-row"><p>${escapeHtml(note.body)}</p><div>${note.tags.map((tag) => `<span class="badge">${escapeHtml(tag.name)}</span>`).join('')}</div></div>`).join('') : '<p class="muted-copy">No notes yet.</p>'}</div></div>
+        </article>
+      </div>`;
+
+    container.querySelector('#issueForm')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const title = event.currentTarget.querySelector('#issueTitle').value.trim();
+      if (!title) return;
+      await api.addIssue(project.id, { title });
+      showToast('Issue saved locally');
+      await initDashboard(container, { project, api, focus });
+    });
+    container.querySelectorAll('.issue-status').forEach((select) => select.addEventListener('change', async () => {
+      await api.updateIssue(project.id, select.dataset.id, { status: select.value });
+      showToast('Issue status updated');
+    }));
+    container.querySelector('#syncGit')?.addEventListener('click', async (event) => {
+      event.currentTarget.disabled = true;
+      await api.syncGit(project.id);
+      showToast('Local Git history refreshed');
+      await initDashboard(container, { project, api, focus });
+    });
+    container.querySelector('#noteForm')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const body = form.querySelector('#noteBody').value.trim();
+      const tags = form.querySelector('#noteTags').value.split(',').map((tag) => tag.trim()).filter(Boolean);
+      await api.addNote(project.id, { body, tags });
+      showToast('Note saved locally');
+      await initDashboard(container, { project, api, focus });
+    });
+    if (focus === 'issues') container.querySelector('#issuesPanel')?.scrollIntoView();
+    if (focus === 'git') container.querySelector('#gitPanel')?.scrollIntoView();
+  } catch (error) {
+    container.innerHTML = `<div class="panel">${emptyState('!', 'Dashboard unavailable', error.message)}</div>`;
+  }
 }
