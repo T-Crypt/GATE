@@ -2,7 +2,9 @@ import { api } from './api.js';
 import { appendLiveActivity, initAgent, renderActivityRail } from './agent.js';
 import { initActivity } from './activity.js';
 import { emptyState, escapeHtml, openDialog, showToast } from './components.js';
-import { initDashboard } from './dashboard.js';
+import { initGit } from './git.js';
+import { initIssues } from './issues.js';
+import { initOverview } from './overview.js';
 import { initReviews } from './reviews.js';
 import { initSettings } from './settings.js';
 import { applyEvent, getState, setProject, setRoute, updateState } from './state.js';
@@ -113,8 +115,12 @@ function renderView() {
       updateState({ projects: getState().projects.map((item) => item.id === updated.id ? updated : item) });
       renderShell();
     } });
-  } else if (['overview', 'issues', 'git'].includes(state.route)) {
-    void initDashboard(content, { project, api, focus: state.route });
+  } else if (state.route === 'overview') {
+    void initOverview(content, { project, api });
+  } else if (state.route === 'issues') {
+    void initIssues(content, { project, api });
+  } else if (state.route === 'git') {
+    void initGit(content, { project, api });
   } else {
     content.innerHTML = `<div class="placeholder-grid"><article class="panel metric"><span class="metric-label">Active runs</span><strong class="metric-value">0</strong></article><article class="panel metric"><span class="metric-label">Blocked gates</span><strong class="metric-value">0</strong></article><article class="panel metric"><span class="metric-label">Review queue</span><strong class="metric-value">0</strong></article></div><div class="panel workstation-placeholder">${emptyState('◇', `${title} is ready`, 'The workstation shell is connected. Detailed controls load in this workspace.')}</div>`;
   }

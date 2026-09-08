@@ -16,8 +16,8 @@ const noteInput = z.object({
 
 export function dashboardRouter(dashboard) {
   const router = Router();
-  router.get('/projects/:projectId/dashboard', (req, res) =>
-    data(res, dashboard.summary(Number(req.params.projectId)))
+  router.get('/projects/:projectId/dashboard', async (req, res) =>
+    data(res, await dashboard.summary(Number(req.params.projectId)))
   );
   router.post('/projects/:projectId/issues', requireIdempotency, (req, res) =>
     data(res, dashboard.addIssue(Number(req.params.projectId), issueInput.parse(req.body), commandContext(req)), 201)
