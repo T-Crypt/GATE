@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { runIdempotent } from './idempotency.js';
+import { ensureGateIgnored } from './repo-mirror.js';
 import { AppError, notFound, validation } from '../domain/errors.js';
 
 function text(value, field) {
@@ -85,11 +86,11 @@ export class ProjectService {
   }
 
   create(input, context) {
-    return runIdempotent(this.db, context, { command: 'project.create', input }, () => {
+    const result = runIdempotent(this.db, context, { command: 'project.create', input }, () => {
       const name = text(input.name, 'name');
       const repoPath = canonicalRepository(input.repoPath);
       const policy = normalizePolicy(input);
-      const result = this.db
+      const row = this.db
         .prepare(
           `INSERT INTO projects(
              name, repo_path, base_branch, production_branch, stable_branch,
@@ -108,7 +109,7 @@ export class ProjectService {
           input.providerKind || 'claude',
           JSON.stringify(input.providerConfig || {})
         );
-      const projectId = Number(result.lastInsertRowid);
+      const projectId = Number(row.lastInsertRowid);
       this.events.append({
         projectId,
         type: 'project.created',
@@ -118,6 +119,12 @@ export class ProjectService {
       });
       return this.get(projectId);
     });
+    try {
+      ensureGateIgnored(result.repoPath);
+    } catch {
+      // Best-effort convenience; a project still connects even if .gitignore can't be written.
+    }
+    return result;
   }
 
   updatePolicy(projectId, input, context) {

@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 
 import { EventStore } from '../../server/application/event-store.js';
@@ -37,6 +39,9 @@ test('create canonicalizes a Git project and always protects its base branch', (
     assert.equal(project.repoPath, repository.repoPath);
     assert.deepEqual(project.protectedBranches, ['main', 'production', 'stable']);
     assert.equal(events.readAfter(project.id, 0, 20)[0].type, 'project.created');
+
+    const gitignore = fs.readFileSync(path.join(repository.repoPath, '.gitignore'), 'utf8');
+    assert.match(gitignore, /^\.gate\/$/m);
   } finally {
     close();
     repository.close();

@@ -28,6 +28,37 @@ async function git(cwd, args) {
   }
 }
 
+// Must match the block ensureGateIgnored() appends in repo-mirror.js exactly.
+const GATE_IGNORE_BLOCK = '# Gate local project state (not shared by default)\n.gate/\n';
+
+async function committedGitignore(root) {
+  try {
+    const { stdout } = await execFileAsync('git', ['show', 'HEAD:.gitignore'], {
+      cwd: root, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024, timeout: 30_000
+    });
+    return stdout;
+  } catch {
+    return null;
+  }
+}
+
+// True only when a working-tree .gitignore differs from its committed version by
+// exactly Gate's own appended block and nothing else — a genuine hand-edit to any
+// other line still counts as real uncommitted work.
+async function isOnlyGateIgnoreChange(root) {
+  const committed = await committedGitignore(root);
+  let working;
+  try {
+    working = fs.readFileSync(path.join(root, '.gitignore'), 'utf8');
+  } catch {
+    return false;
+  }
+  if (committed === null) return working === GATE_IGNORE_BLOCK;
+  if (!working.startsWith(committed)) return false;
+  return working.slice(committed.length) === GATE_IGNORE_BLOCK
+    || working.slice(committed.length) === `\n${GATE_IGNORE_BLOCK}`;
+}
+
 function safeRunId(runId) {
   const normalized = String(runId ?? '').trim();
   if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,79}$/.test(normalized)) {
@@ -49,13 +80,20 @@ export class GitAdapter {
       if (error.code !== 'GIT_COMMAND_FAILED') throw error;
     }
     const status = await git(root, ['status', '--porcelain=v1', '--untracked-files=normal']);
-    // .gate/ is gate's own generated mirror (issues/timeline/notes snapshot). It's
-    // regenerated from the database on every mutation, so its presence shouldn't trip
-    // the "no uncommitted work" guard that keeps runs branching from a known-clean tree.
-    const relevantStatus = status
-      .split('\n')
-      .filter(Boolean)
-      .filter((line) => !line.slice(3).split(' -> ').pop().startsWith('.gate/'));
+    // .gate/ is gate's own generated mirror (issues/timeline/notes snapshot), regenerated
+    // from the database on every mutation. A .gitignore change is also exempt, but only
+    // when it's exactly Gate's own appended ".gate/" entry and nothing else — a genuine
+    // hand-edit to .gitignore still correctly counts as uncommitted work. Neither should
+    // trip the "no uncommitted work" guard that keeps runs branching from a known-clean tree.
+    const statusLines = status.split('\n').filter(Boolean);
+    const onlyGateIgnoreChange = statusLines.some((line) => line.slice(3) === '.gitignore')
+      && await isOnlyGateIgnoreChange(root);
+    const relevantStatus = statusLines.filter((line) => {
+      const filePath = line.slice(3).split(' -> ').pop();
+      if (filePath.startsWith('.gate/')) return false;
+      if (filePath === '.gitignore' && onlyGateIgnoreChange) return false;
+      return true;
+    });
     const gitDir = path.resolve(root, await git(root, ['rev-parse', '--git-dir']));
     const commonDir = path.resolve(root, await git(root, ['rev-parse', '--git-common-dir']));
 

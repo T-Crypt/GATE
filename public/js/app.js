@@ -9,6 +9,9 @@ import { initReviews } from './reviews.js';
 import { initSettings } from './settings.js';
 import { applyEvent, getState, setProject, setRoute, updateState } from './state.js';
 import { initTimeline } from './timeline.js';
+import { applyAccent, getAccent } from './theme.js';
+
+applyAccent(getAccent());
 
 const app = document.getElementById('app');
 let socket = null;
@@ -47,6 +50,7 @@ function renderShell() {
           <select id="projectSelect" class="project-select" ${state.projects.length ? '' : 'disabled'}>
             ${state.projects.length ? state.projects.map((item) => `<option value="${item.id}" ${item.id === state.projectId ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('') : '<option>No projects</option>'}
           </select>
+          <button class="icon-button" id="addProjectButton" aria-label="Connect another project" title="Connect another project">+</button>
           ${project ? `<span class="branch-pill">${escapeHtml(project.baseBranch)}</span><span class="mode-pill">${escapeHtml(project.interactionLevel)}</span>` : ''}
         </div>
         <div class="system-bar"><span class="connection-pill" id="connectionPill" data-state="${state.connection}">${escapeHtml(state.connection)}</span><button class="icon-button" id="commandButton" aria-label="Open command palette">⌘</button></div>
@@ -70,6 +74,7 @@ function bindShell() {
     connectLiveEvents();
     renderShell();
   });
+  document.getElementById('addProjectButton')?.addEventListener('click', openOnboarding);
   document.getElementById('navToggle')?.addEventListener('click', () => document.getElementById('sidebar').classList.toggle('open'));
   document.querySelectorAll('.nav-link').forEach((link) => link.addEventListener('click', () => document.getElementById('sidebar').classList.remove('open')));
   document.getElementById('commandButton')?.addEventListener('click', openCommandPalette);
@@ -133,9 +138,10 @@ async function refreshActivity() {
 }
 
 function openOnboarding() {
+  const label = getState().projects.length ? 'Connect a project' : 'Connect your first project';
   openDialog({
-    label: 'Connect your first project',
-    content: `<div class="dialog-header"><p class="eyebrow">Local Git workspace</p><h2>Connect your first project</h2><p>Gate stores coordination data locally and never works directly on protected branches.</p></div><form class="dialog-body form-grid" id="projectForm"><div class="field"><label for="projectName">Project name</label><input id="projectName" name="name" autocomplete="off" required maxlength="120" placeholder="Aphotic workstation" /></div><div class="field"><label for="repoPath">Repository path</label><input id="repoPath" name="repoPath" autocomplete="off" required placeholder="/home/you/project" /><span class="field-hint">Absolute path to an existing local Git repository.</span></div><div class="form-split"><div class="field"><label for="baseBranch">Base branch</label><input id="baseBranch" name="baseBranch" value="main" required /></div><div class="field"><label for="stableBranch">Stable branch</label><input id="stableBranch" name="stableBranch" placeholder="stable" /></div></div><div class="field"><label for="productionBranch">Production branch</label><input id="productionBranch" name="productionBranch" placeholder="production" /></div><p class="form-error" id="projectError" role="alert"></p><div class="button-row"><button class="button primary" type="submit">Connect project</button></div></form>`,
+    label,
+    content: `<div class="dialog-header"><p class="eyebrow">Local Git workspace</p><h2>${escapeHtml(label)}</h2><p>Gate stores coordination data locally and never works directly on protected branches.</p></div><form class="dialog-body form-grid" id="projectForm"><div class="field"><label for="projectName">Project name</label><input id="projectName" name="name" autocomplete="off" required maxlength="120" placeholder="Aphotic workstation" /></div><div class="field"><label for="repoPath">Repository path</label><input id="repoPath" name="repoPath" autocomplete="off" required placeholder="/home/you/project" /><span class="field-hint">Absolute path to an existing local Git repository.</span></div><div class="form-split"><div class="field"><label for="baseBranch">Base branch</label><input id="baseBranch" name="baseBranch" value="main" required /></div><div class="field"><label for="stableBranch">Stable branch</label><input id="stableBranch" name="stableBranch" placeholder="stable" /></div></div><div class="field"><label for="productionBranch">Production branch</label><input id="productionBranch" name="productionBranch" placeholder="production" /></div><p class="form-error" id="projectError" role="alert"></p><div class="button-row"><button class="button primary" type="submit">Connect project</button></div></form>`,
     onMount(dialog) {
       const form = dialog.querySelector('#projectForm');
       form.addEventListener('submit', async (event) => {

@@ -8,6 +8,21 @@ import path from 'node:path';
 // command, no automation of push/merge).
 const RELEVANT_PREFIXES = ['project.', 'timeline.', 'issue.', 'note.'];
 
+// .gate/ holds this machine's view of a project (timeline, issues, notes). It
+// stays out of the project's own commits by default, so cloning someone's repo
+// never silently exposes their local Gate state. This only edits .gitignore —
+// it never runs git itself.
+export function ensureGateIgnored(repoPath) {
+  const gitignorePath = path.join(repoPath, '.gitignore');
+  const existing = fs.existsSync(gitignorePath) ? fs.readFileSync(gitignorePath, 'utf8') : '';
+  const alreadyIgnored = existing
+    .split('\n')
+    .some((line) => line.trim() === '.gate/' || line.trim() === '.gate');
+  if (alreadyIgnored) return;
+  const prefix = existing && !existing.endsWith('\n') ? '\n\n' : existing ? '\n' : '';
+  fs.writeFileSync(gitignorePath, `${existing}${prefix}# Gate local project state (not shared by default)\n.gate/\n`);
+}
+
 function statusChar(status) {
   return ({
     planned: ' ', ready: '>', running: '~', blocked: '!', review: '?',
@@ -35,6 +50,10 @@ export class RepoMirrorService {
   sync(projectId) {
     const project = this.projects.get(projectId);
     const dir = path.join(project.repoPath, '.gate');
+    // Repairs projects connected before ensureGateIgnored existed at connect-time.
+    // Safe to call on every sync: GitAdapter's dirty check exempts a .gitignore
+    // change when it is exactly this appended block and nothing else.
+    ensureGateIgnored(project.repoPath);
     fs.mkdirSync(dir, { recursive: true });
 
     const nodes = this.db.prepare('SELECT * FROM timeline_nodes WHERE project_id = ? ORDER BY ordinal, id').all(projectId);

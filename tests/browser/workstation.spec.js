@@ -129,6 +129,41 @@ test('settings always retains the base branch as protected', async ({ page, requ
   await expect(page.getByLabel('main protected')).toBeDisabled();
 });
 
+test('can connect and switch between multiple projects', async ({ page, request }) => {
+  const first = await ensureProject(request);
+  await page.goto('/');
+  await expect(page.getByRole('banner')).toContainText(first.name);
+
+  await page.getByRole('button', { name: 'Connect another project' }).click();
+  await expect(page.getByRole('heading', { name: 'Connect a project' })).toBeVisible();
+  await page.getByLabel('Project name').fill('Second Project');
+  await page.getByLabel('Repository path').fill('/tmp/gate-browser-project');
+  await page.getByLabel('Base branch').fill('main');
+  await page
+    .getByRole('dialog', { name: 'Connect a project' })
+    .getByRole('button', { name: 'Connect project' })
+    .click();
+
+  await expect(page.getByRole('banner')).toContainText('Second Project');
+  const select = page.getByLabel('Active project');
+  await expect(select).toHaveValue(/.+/);
+  await select.selectOption({ label: first.name });
+  await expect(page.getByRole('banner')).toContainText(first.name);
+});
+
+test('accent color choice persists across reloads without touching status colors', async ({ page, request }) => {
+  await ensureProject(request);
+  await page.goto('/#/settings');
+
+  await expect(page.locator('html')).not.toHaveAttribute('data-accent', /.+/);
+  await page.getByRole('radio', { name: 'Purple' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-accent', 'purple');
+
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-accent', 'purple');
+  await expect(page.getByRole('radio', { name: 'Purple' })).toHaveAttribute('aria-checked', 'true');
+});
+
 test('overview, issues, and git render distinct views instead of one shared dashboard', async ({ page, request }) => {
   await ensureProject(request);
 
