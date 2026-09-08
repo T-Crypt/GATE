@@ -133,7 +133,7 @@ test('withTransaction rolls back every write on failure', () => {
 
 - [ ] **Step 2: Run the database test and verify RED**
 
-Run: `node --test tests/integration/database.test.js`  
+Run: `node --test tests/integration/database.test.js`
 Expected: FAIL because the database modules and migration do not exist.
 
 - [ ] **Step 3: Replace the native binding and implement migrations**
@@ -158,7 +158,7 @@ Set `engines.node` to `>=24`, remove `better-sqlite3`, add `test`, `test:unit`, 
 
 - [ ] **Step 4: Run database tests and the full baseline**
 
-Run: `npm test`  
+Run: `npm test`
 Expected: PASS with database tests green and no native install-script warning.
 
 - [ ] **Step 5: Commit**
@@ -204,7 +204,7 @@ test('repeating an idempotent create returns the original result', () => {
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `node --test tests/integration/events.test.js tests/integration/projects.test.js`  
+Run: `node --test tests/integration/events.test.js tests/integration/projects.test.js`
 Expected: FAIL because `EventStore` and `ProjectService` do not exist.
 
 - [ ] **Step 3: Implement typed errors, events, and project policy projection**
@@ -213,7 +213,7 @@ Canonicalize repository paths with `realpathSync`, require an existing `.git` re
 
 - [ ] **Step 4: Verify GREEN and mutation cases**
 
-Run: `node --test tests/integration/events.test.js tests/integration/projects.test.js`  
+Run: `node --test tests/integration/events.test.js tests/integration/projects.test.js`
 Expected: PASS, including duplicate keys, nonexistent repositories, empty branch names, and reused idempotency keys with different payloads.
 
 - [ ] **Step 5: Commit**
@@ -262,7 +262,7 @@ test('evidence from another HEAD cannot satisfy a gate', () => {
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `node --test tests/unit/timeline.test.js tests/unit/gates.test.js`  
+Run: `node --test tests/unit/timeline.test.js tests/unit/gates.test.js`
 Expected: FAIL because timeline and gate policies do not exist.
 
 - [ ] **Step 3: Implement policy and event-backed timeline commands**
@@ -271,7 +271,7 @@ Implement deterministic DFS cycle detection, an explicit transition matrix, type
 
 - [ ] **Step 4: Run unit and integration tests**
 
-Run: `node --test tests/unit/timeline.test.js tests/unit/gates.test.js tests/integration/timeline.test.js`  
+Run: `node --test tests/unit/timeline.test.js tests/unit/gates.test.js tests/integration/timeline.test.js`
 Expected: PASS for graph replacement, dependency readiness, invalid transitions, locked-node preservation, and fresh/stale evidence.
 
 - [ ] **Step 5: Commit**
@@ -319,7 +319,7 @@ test('worktree execution is rejected after external branch switching', async () 
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `node --test tests/unit/branch-policy.test.js tests/integration/git.test.js`  
+Run: `node --test tests/unit/branch-policy.test.js tests/integration/git.test.js`
 Expected: FAIL because branch policy and Git adapter do not exist.
 
 - [ ] **Step 3: Implement non-shell Git operations and preflight guards**
@@ -328,7 +328,7 @@ Use `execFile` with fixed Git subcommands and argument arrays. Resolve repositor
 
 - [ ] **Step 4: Verify safety tests**
 
-Run: `node --test tests/unit/branch-policy.test.js tests/integration/git.test.js`  
+Run: `node --test tests/unit/branch-policy.test.js tests/integration/git.test.js`
 Expected: PASS for protected branches, detached HEAD, dirty base, external branch switching, duplicate worktrees, and cleanup refusal with uncommitted work.
 
 - [ ] **Step 5: Commit**
@@ -384,7 +384,7 @@ test('a drafted timeline is validated but remains proposed until accepted', asyn
 
 - [ ] **Step 2: Run execution tests and verify RED**
 
-Run: `node --test tests/integration/execution.test.js`  
+Run: `node --test tests/integration/execution.test.js`
 Expected: FAIL because provider and execution modules do not exist.
 
 - [ ] **Step 3: Implement process isolation, Claude adapter, and scheduler**
@@ -393,7 +393,7 @@ Launch Claude with `spawn(executable, args, { shell: false, cwd, env })`, send t
 
 - [ ] **Step 4: Verify execution and recovery**
 
-Run: `node --test tests/integration/execution.test.js`  
+Run: `node --test tests/integration/execution.test.js`
 Expected: PASS for ready ordering, dependency blocking, output streaming, redaction, limits, cancellation, non-zero exits, restart recovery, and branch preflight failure.
 
 - [ ] **Step 5: Commit**
@@ -443,7 +443,7 @@ test('a reconnect replays events after the client sequence', async () => {
 
 - [ ] **Step 2: Run API and WebSocket tests and verify RED**
 
-Run: `node --test tests/integration/api.test.js tests/integration/websocket.test.js`  
+Run: `node --test tests/integration/api.test.js tests/integration/websocket.test.js`
 Expected: FAIL because the versioned app and replay stream do not exist.
 
 - [ ] **Step 3: Implement transports and lifecycle**
@@ -452,7 +452,7 @@ Add `/health`, `/ready`, and `/api/v1` routes for projects, proposed timeline dr
 
 - [ ] **Step 4: Verify transport contracts**
 
-Run: `node --test tests/integration/api.test.js tests/integration/websocket.test.js`  
+Run: `node --test tests/integration/api.test.js tests/integration/websocket.test.js`
 Expected: PASS for envelopes, limits, conflicts, health, replay, heartbeat, invalid subscriptions, and slow-client closure.
 
 - [ ] **Step 5: Commit**
@@ -495,7 +495,7 @@ test('mutating MCP tools require idempotency keys', async () => {
 
 - [ ] **Step 2: Run MCP tests and verify RED**
 
-Run: `node --test tests/integration/mcp.test.js`  
+Run: `node --test tests/integration/mcp.test.js`
 Expected: FAIL because the MCP server and tools do not exist.
 
 - [ ] **Step 3: Implement stdio MCP tools**
@@ -504,7 +504,7 @@ Use Zod schemas for every tool, return compact structured content, map domain er
 
 - [ ] **Step 4: Verify MCP contracts**
 
-Run: `node --test tests/integration/mcp.test.js`  
+Run: `node --test tests/integration/mcp.test.js`
 Expected: PASS for discovery, reads, mutations, idempotency, branch protection, invalid graph input, and evidence policy.
 
 - [ ] **Step 5: Commit**
@@ -548,7 +548,7 @@ test('onboards a project and exposes keyboard navigation', async ({ page }) => {
 
 - [ ] **Step 2: Run Playwright and verify RED**
 
-Run: `npm run test:browser -- --grep "onboards a project"`  
+Run: `npm run test:browser -- --grep "onboards a project"`
 Expected: FAIL because the workstation shell and accessible onboarding do not exist.
 
 - [ ] **Step 3: Implement the shell and visual system**
@@ -557,7 +557,7 @@ Build a responsive app frame with project/header safety status, collapsible navi
 
 - [ ] **Step 4: Verify browser, accessibility, and responsive behavior**
 
-Run: `npm run test:browser -- --grep "shell|onboards|keyboard|responsive"`  
+Run: `npm run test:browser -- --grep "shell|onboards|keyboard|responsive"`
 Expected: PASS at desktop and mobile viewports with semantic landmarks, visible focus, and no horizontal page overflow.
 
 - [ ] **Step 5: Commit**
@@ -605,7 +605,7 @@ test('drafts a goal and requires acceptance before scheduling it', async ({ page
 
 - [ ] **Step 2: Run focused Playwright test and verify RED**
 
-Run: `npm run test:browser -- --grep "cross-milestone gates"`  
+Run: `npm run test:browser -- --grep "cross-milestone gates"`
 Expected: FAIL because the live dependency timeline does not exist.
 
 - [ ] **Step 3: Implement timeline canvas and activity rail**
@@ -614,7 +614,7 @@ Render a goal composer and proposed-draft acceptance flow, then milestone lanes,
 
 - [ ] **Step 4: Verify timeline behavior**
 
-Run: `npm run test:browser -- --grep "timeline|agent activity|reconnect"`  
+Run: `npm run test:browser -- --grep "timeline|agent activity|reconnect"`
 Expected: PASS for dependency rendering, event updates, blocked gates, cancel, replay after reconnect, keyboard selection, and reduced motion.
 
 - [ ] **Step 5: Commit**
@@ -659,7 +659,7 @@ test('settings always retains the base branch as protected', async ({ page }) =>
 
 - [ ] **Step 2: Run focused browser tests and verify RED**
 
-Run: `npm run test:browser -- --grep "review center|settings"`  
+Run: `npm run test:browser -- --grep "review center|settings"`
 Expected: FAIL because review and settings views do not exist.
 
 - [ ] **Step 3: Implement operational views**
@@ -668,7 +668,7 @@ Build overview metrics, active/blocked work, recent Git events, issues, notes, r
 
 - [ ] **Step 4: Verify workflows**
 
-Run: `npm run test:browser -- --grep "overview|review center|settings|protected"`  
+Run: `npm run test:browser -- --grep "overview|review center|settings|protected"`
 Expected: PASS for empty/populated states, stale evidence, approval notes, provider health, and protected-branch controls.
 
 - [ ] **Step 5: Commit**
@@ -715,7 +715,7 @@ test('non-loopback bind requires explicit opt-in', () => {
 
 - [ ] **Step 2: Run recovery and security tests and verify RED**
 
-Run: `node --test tests/integration/recovery.test.js tests/integration/security.test.js`  
+Run: `node --test tests/integration/recovery.test.js tests/integration/security.test.js`
 Expected: FAIL for missing backup/recovery behavior and remote-bind policy.
 
 - [ ] **Step 3: Implement operations and documentation**
@@ -724,18 +724,18 @@ Add startup recovery, graceful shutdown, provider readiness, SQLite backup with 
 
 - [ ] **Step 4: Run the complete release gate**
 
-Run: `npm run check`  
+Run: `npm run check`
 Expected: formatter/lint, unit, integration, MCP, and browser suites all pass with zero failures.
 
-Run: `npm audit --omit=dev`  
+Run: `npm audit --omit=dev`
 Expected: zero known production vulnerabilities.
 
-Run: `HOST=127.0.0.1 PORT=4177 npm start` and complete the documented health probe.  
+Run: `HOST=127.0.0.1 PORT=4177 npm start` and complete the documented health probe.
 Expected: `/health` returns process health, `/ready` reports database ready, and the browser loads the workstation without console errors.
 
 - [ ] **Step 5: Inspect the final branch**
 
-Run: `git diff --check main...HEAD && git status --short --branch && git log --oneline main..HEAD`  
+Run: `git diff --check main...HEAD && git status --short --branch && git log --oneline main..HEAD`
 Expected: no whitespace errors, clean worktree, and only reviewable feature commits.
 
 - [ ] **Step 6: Commit**
