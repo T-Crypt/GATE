@@ -1,7 +1,7 @@
 # Project MCP Localhost Developer Workstation Design
 
-**Date:** 2026-09-07  
-**Status:** Approved design, pending implementation plan  
+**Date:** 2026-09-07
+**Status:** Approved design, pending implementation plan
 **Target:** Localhost-first, single-user developer workstation
 
 ## Product intent
