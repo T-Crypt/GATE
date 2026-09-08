@@ -102,12 +102,37 @@ export class DashboardService {
     });
   }
 
-  summary(projectId) {
+  async #gitStatus(project) {
+    try {
+      const state = await this.git.inspect(project.repoPath);
+      return { branch: state.branch, headSha: state.headSha, dirty: state.dirty };
+    } catch {
+      return { branch: null, headSha: null, dirty: false };
+    }
+  }
+
+  async #changedFiles(project, gitEvents) {
+    const baseSha = gitEvents[0]?.commit_hash;
+    if (!baseSha) return [];
+    try {
+      return await this.git.changedFiles({ worktreePath: project.repoPath, baseSha });
+    } catch {
+      return [];
+    }
+  }
+
+  async summary(projectId) {
+    const project = this.projects.get(projectId);
     const timelineCounts = Object.fromEntries(this.db.prepare(
       `SELECT status, COUNT(*) AS count FROM timeline_nodes
        WHERE project_id = ? AND kind = 'step' GROUP BY status`
     ).all(projectId).map((row) => [row.status, row.count]));
     const issues = this.db.prepare('SELECT * FROM issues WHERE project_id = ? ORDER BY id DESC').all(projectId);
+    const gitEvents = this.db.prepare('SELECT * FROM git_events WHERE project_id = ? ORDER BY committed_at DESC LIMIT 100').all(projectId);
+    const [gitStatus, changedFiles] = await Promise.all([
+      this.#gitStatus(project),
+      this.#changedFiles(project, gitEvents)
+    ]);
     return {
       metrics: {
         activeRuns: this.db.prepare("SELECT COUNT(*) AS count FROM runs WHERE project_id = ? AND status IN ('starting','running')").get(projectId).count,
@@ -118,7 +143,9 @@ export class DashboardService {
       timelineCounts,
       issues,
       notes: this.db.prepare('SELECT * FROM notes WHERE project_id = ? ORDER BY id DESC').all(projectId).map((row) => this.#note(row)),
-      gitEvents: this.db.prepare('SELECT * FROM git_events WHERE project_id = ? ORDER BY committed_at DESC LIMIT 100').all(projectId),
+      gitEvents,
+      gitStatus,
+      changedFiles,
       activity: this.db.prepare('SELECT * FROM activity WHERE project_id = ? ORDER BY id DESC LIMIT 100').all(projectId)
     };
   }
