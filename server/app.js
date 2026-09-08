@@ -36,8 +36,8 @@ export function createApp({ services, config, logger, routes = true }) {
       }
     })
   );
-  app.use(express.json({ limit: config.jsonLimit }));
   app.use(requestContext);
+  app.use(express.json({ limit: config.jsonLimit }));
   if (logger) {
     app.use((req, _res, next) => {
       req.log = logger.child({ requestId: req.requestId });

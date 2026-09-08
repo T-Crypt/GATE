@@ -16,7 +16,7 @@
     "test:integration": "node --test tests/integration",
     "test:browser": "playwright test",
     "lint": "find server public/js tests -name '*.js' -print0 | xargs -0 -n1 node --check",
-    "check": "npm run lint && npm test"
+    "check": "npm run lint && npm test && npm run test:browser"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

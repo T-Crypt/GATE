@@ -282,15 +282,16 @@ export class ExecutionService {
       .all();
     const recovered = [];
     for (const row of rows) {
-      this.db
-        .prepare("UPDATE runs SET status = 'interrupted', finished_at = datetime('now') WHERE id = ?")
-        .run(row.id);
-      const node = this.db.prepare('SELECT status FROM timeline_nodes WHERE id = ?').get(row.node_id);
-      if (node?.status === 'running') {
-        this.db
-          .prepare("UPDATE timeline_nodes SET status = 'blocked', updated_at = datetime('now') WHERE id = ?")
-          .run(row.node_id);
-      }
+      this.events.append({
+        projectId: row.project_id,
+        type: 'agent.run.interrupted',
+        actor: { type: 'system', id: 'startup-recovery' },
+        correlationId: `recovery:${row.id}`,
+        payload: { runId: row.id, nodeId: row.node_id, previousStatus: row.status }
+      }, () => {
+        this.db.prepare("UPDATE runs SET status = 'interrupted', finished_at = datetime('now') WHERE id = ?").run(row.id);
+        this.db.prepare("UPDATE timeline_nodes SET status = 'blocked', updated_at = datetime('now') WHERE id = ? AND status = 'running'").run(row.node_id);
+      });
       recovered.push(this.get(row.id));
     }
     return recovered;
