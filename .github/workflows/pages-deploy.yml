@@ -29,8 +29,8 @@ jobs:
         with:
           ruby-version: "3.3"
 
-      - name: Install Jekyll and minima theme
-        run: gem install --no-document jekyll minima
+      - name: Install Jekyll
+        run: gem install --no-document jekyll
 
       - name: Build site
         working-directory: site

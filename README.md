@@ -20,7 +20,7 @@ The name is literal. The core domain object is the gate: a checkpoint a step mus
 
 **Shows you the whole plan at once.** The timeline view renders a mile-marker rail across the top: one colored badge per milestone, connected by a track, showing which milestones are gating which. A locked marker tells you exactly which upstream milestone is holding it up. Each milestone's lane carries the same color as its marker, so the overview and the detail stay visually tied together.
 
-**Keeps a copy in your repo.** Gate mirrors each project's timeline, issues, and notes into `<repo>/.gate/` as plain JSON and Markdown, refreshed on every change. These are ordinary tracked files. Commit and push them the way you would any other file, and this data travels with the repo instead of living only in Gate's local database.
+**Keeps a copy in your repo.** Gate mirrors each project's timeline, issues, and notes into `<repo>/.gate/` as plain JSON and Markdown, refreshed on every change. The mirror is ignored by default — Gate appends a `.gate/` entry to the repository's `.gitignore` when it first connects. Remove that entry if you want this data to travel with the repo instead of living only in Gate's local database.
 
 **Speaks MCP too.** The same application services run over stdio for any MCP client. Read tools list projects, timelines, runs, review bundles, and the recent activity feed. Mutation tools require an idempotency key and can draft or accept timelines, start, schedule, or cancel steps, submit evidence, create or update issues, and add notes. There is deliberately no approval tool and no merge, push, or protected-branch mutation tool over MCP: an agent can report evidence, but it cannot approve its own gate.
 

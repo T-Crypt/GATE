@@ -1,5 +1,5 @@
 ---
-layout: page
+layout: default
 title: MCP interface
 permalink: /docs/mcp/
 ---
