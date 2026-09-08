@@ -1,77 +1,191 @@
-import { initDashboard } from './dashboard.js';
-import { initAgent } from './agent.js';
-import { initTimeline } from './timeline.js';
+import { api } from './api.js';
+import { emptyState, escapeHtml, openDialog, showToast } from './components.js';
+import { applyEvent, getState, setProject, setRoute, updateState } from './state.js';
 
-export const state = {
-  projectId: null
-};
+const app = document.getElementById('app');
+let socket = null;
+let reconnectTimer = null;
 
-async function loadProjects() {
-  const res = await fetch('/api/projects');
-  const projects = await res.json();
-  const select = document.getElementById('projectSelect');
-  select.innerHTML = '';
+const routes = [
+  ['overview', 'OV', 'Overview'],
+  ['timeline', 'TL', 'Timeline'],
+  ['agent', 'AI', 'Agent'],
+  ['issues', 'IS', 'Issues'],
+  ['git', 'GT', 'Git'],
+  ['reviews', 'RV', 'Reviews'],
+  ['settings', 'ST', 'Settings']
+];
 
-  if (projects.length === 0) {
-    const opt = document.createElement('option');
-    opt.textContent = 'No projects — add one below';
-    select.appendChild(opt);
-    promptCreateProject();
+function activeProject(state = getState()) {
+  return state.projects.find((project) => project.id === state.projectId) || state.projects[0] || null;
+}
+
+function routeFromHash() {
+  const route = location.hash.replace(/^#\/?/, '').split('/')[0] || 'overview';
+  return routes.some(([name]) => name === route) ? route : 'overview';
+}
+
+function renderShell() {
+  const state = getState();
+  const project = activeProject(state);
+  app.innerHTML = `
+    <div class="workstation">
+      <header class="topbar">
+        <div class="brand-wrap"><span class="brand-mark" aria-hidden="true">PM</span><span class="brand-name">Project MCP<small>local control plane</small></span></div>
+        <div class="project-bar">
+          <button class="nav-toggle" id="navToggle" aria-label="Open navigation">☰</button>
+          <label class="sr-only" for="projectSelect">Active project</label>
+          <select id="projectSelect" class="project-select" ${state.projects.length ? '' : 'disabled'}>
+            ${state.projects.length ? state.projects.map((item) => `<option value="${item.id}" ${item.id === state.projectId ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('') : '<option>No projects</option>'}
+          </select>
+          ${project ? `<span class="branch-pill">${escapeHtml(project.baseBranch)}</span><span class="mode-pill">${escapeHtml(project.interactionLevel)}</span>` : ''}
+        </div>
+        <div class="system-bar"><span class="connection-pill" id="connectionPill" data-state="${state.connection}">${escapeHtml(state.connection)}</span><button class="icon-button" id="commandButton" aria-label="Open command palette">⌘</button></div>
+      </header>
+      <aside class="sidebar" id="sidebar">
+        <p class="nav-label">Workspace</p>
+        <nav aria-label="Workspace"><ul class="nav-list">${routes.map(([route, icon, label]) => `<li><a class="nav-link ${state.route === route ? 'active' : ''}" href="#/${route}"><span class="nav-icon" aria-hidden="true">${icon}</span><span>${label}</span>${route === 'reviews' ? '<span class="nav-count">0</span>' : ''}</a></li>`).join('')}</ul></nav>
+        <div class="sidebar-footer"><strong>Human review required</strong><p>Protected branches cannot be changed or integrated by automatic runs.</p></div>
+      </aside>
+      <main class="workspace-main" id="workspace"></main>
+      <aside class="activity-rail" aria-label="Agent activity"><div class="activity-head"><h2>Agent activity</h2><p>Live intent, evidence, and blockers</p></div><div class="activity-body" id="activityBody"><div class="activity-empty">No agent run is active.</div><div class="rail-card"><strong>Safety boundary</strong><p>${project ? `Runs branch from ${escapeHtml(project.baseBranch)} into an isolated worktree.` : 'Connect a project to configure branch protection.'}</p></div></div></aside>
+    </div>`;
+  bindShell();
+  renderView();
+}
+
+function bindShell() {
+  document.getElementById('projectSelect')?.addEventListener('change', (event) => {
+    setProject(event.target.value);
+    connectLiveEvents();
+    renderShell();
+  });
+  document.getElementById('navToggle')?.addEventListener('click', () => document.getElementById('sidebar').classList.toggle('open'));
+  document.querySelectorAll('.nav-link').forEach((link) => link.addEventListener('click', () => document.getElementById('sidebar').classList.remove('open')));
+  document.getElementById('commandButton')?.addEventListener('click', openCommandPalette);
+}
+
+function viewHeader(eyebrow, title, description, actions = '') {
+  return `<header class="view-header"><div><p class="eyebrow">${escapeHtml(eyebrow)}</p><h1>${escapeHtml(title)}</h1><p class="lede">${escapeHtml(description)}</p></div>${actions ? `<div class="button-row">${actions}</div>` : ''}</header>`;
+}
+
+function renderView() {
+  const workspace = document.getElementById('workspace');
+  if (!workspace) return;
+  const state = getState();
+  if (!activeProject(state)) {
+    workspace.innerHTML = `<section class="view">${viewHeader('Local workstation', 'Welcome to Project MCP', 'Connect a Git repository to begin planning and reviewing AI development.')}<div class="panel">${emptyState('＋', 'No project connected', 'Your repositories stay local. Project MCP creates isolated worktrees for automatic runs.', '<button class="button primary" id="connectEmpty">Connect project</button>')}</div></section>`;
+    document.getElementById('connectEmpty')?.addEventListener('click', openOnboarding);
     return;
   }
-
-  for (const p of projects) {
-    const opt = document.createElement('option');
-    opt.value = p.id;
-    opt.textContent = p.name;
-    select.appendChild(opt);
-  }
-
-  state.projectId = projects[0].id;
-  select.value = state.projectId;
-  select.addEventListener('change', () => {
-    state.projectId = Number(select.value);
-    refreshActiveTab();
-  });
-
-  refreshActiveTab();
+  const definitions = {
+    overview: ['Project signal', 'Project overview', 'Execution, review, and repository health at a glance.'],
+    timeline: ['Guided execution', 'Interactive timeline', 'Milestones, dependencies, code gates, visual gates, and approvals.'],
+    agent: ['Claude provider', 'Agent control', 'Observe current intent, streamed output, and bounded execution.'],
+    issues: ['Local tracking', 'Issues', 'Small work items linked to branches and timeline context.'],
+    git: ['Repository', 'Git activity', 'Commits, branches, and changes observed from this local project.'],
+    reviews: ['Human gate', 'Review center', 'Diffs, test evidence, screenshots, decisions, and approvals.'],
+    settings: ['Project policy', 'Settings', 'Provider, interaction level, branch safety, and local storage.']
+  };
+  const [eyebrow, title, description] = definitions[state.route];
+  workspace.innerHTML = `<section class="view">${viewHeader(eyebrow, title, description)}<div class="placeholder-grid"><article class="panel metric"><span class="metric-label">Active runs</span><strong class="metric-value">0</strong></article><article class="panel metric"><span class="metric-label">Blocked gates</span><strong class="metric-value">0</strong></article><article class="panel metric"><span class="metric-label">Review queue</span><strong class="metric-value">0</strong></article></div><div class="panel workstation-placeholder">${emptyState('◇', `${title} is ready`, 'The workstation shell is connected. Detailed controls load in this workspace.')}</div></section>`;
 }
 
-async function promptCreateProject() {
-  const name = prompt('Project name:');
-  if (!name) return;
-  const repo_path = prompt('Absolute path to git repo on this machine:');
-  if (!repo_path) return;
-  const agent_cmd = prompt('CLI command to drive the agent (default: claude):', 'claude');
-
-  await fetch('/api/projects', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, repo_path, agent_cmd })
-  });
-  loadProjects();
-}
-
-function setupTabs() {
-  const buttons = document.querySelectorAll('.tab-btn');
-  buttons.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      buttons.forEach((b) => b.classList.remove('active'));
-      document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
-      refreshActiveTab();
-    });
+function openOnboarding() {
+  openDialog({
+    label: 'Connect your first project',
+    content: `<div class="dialog-header"><p class="eyebrow">Local Git workspace</p><h2>Connect your first project</h2><p>Project MCP stores coordination data locally and never works directly on protected branches.</p></div><form class="dialog-body form-grid" id="projectForm"><div class="field"><label for="projectName">Project name</label><input id="projectName" name="name" autocomplete="off" required maxlength="120" placeholder="Aphotic workstation" /></div><div class="field"><label for="repoPath">Repository path</label><input id="repoPath" name="repoPath" autocomplete="off" required placeholder="/home/you/project" /><span class="field-hint">Absolute path to an existing local Git repository.</span></div><div class="form-split"><div class="field"><label for="baseBranch">Base branch</label><input id="baseBranch" name="baseBranch" value="main" required /></div><div class="field"><label for="stableBranch">Stable branch</label><input id="stableBranch" name="stableBranch" placeholder="stable" /></div></div><div class="field"><label for="productionBranch">Production branch</label><input id="productionBranch" name="productionBranch" placeholder="production" /></div><p class="form-error" id="projectError" role="alert"></p><div class="button-row"><button class="button primary" type="submit">Connect project</button></div></form>`,
+    onMount(dialog) {
+      const form = dialog.querySelector('#projectForm');
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const values = Object.fromEntries(new FormData(form));
+        const button = form.querySelector('button[type="submit"]');
+        button.disabled = true;
+        try {
+          const project = await api.createProject(values);
+          const projects = await api.listProjects();
+          updateState({ projects, projectId: project.id });
+          dialog.close();
+          renderShell();
+          connectLiveEvents();
+          showToast(`${project.name} connected`);
+        } catch (error) {
+          form.querySelector('#projectError').textContent = error.message;
+          button.disabled = false;
+        }
+      });
+    }
   });
 }
 
-function refreshActiveTab() {
+function openCommandPalette() {
+  const commands = routes.map(([route, icon, label]) => ({ route, icon, label: `Open ${label.toLowerCase()}` }));
+  openDialog({
+    label: 'Command palette',
+    className: 'command-dialog',
+    content: `<label class="sr-only" for="commandSearch">Search commands</label><input id="commandSearch" class="command-search" placeholder="Type a command…" autocomplete="off" /><ul class="command-list" role="listbox">${commands.map((command, index) => `<li><button class="command-item" role="option" aria-selected="${index === 0}" data-route="${command.route}"><span class="nav-icon">${command.icon}</span>${escapeHtml(command.label)}<span class="command-key">↵</span></button></li>`).join('')}</ul>`,
+    onMount(dialog) {
+      const search = dialog.querySelector('#commandSearch');
+      const items = [...dialog.querySelectorAll('.command-item')];
+      items.forEach((item) => item.addEventListener('click', () => { location.hash = `#/${item.dataset.route}`; dialog.close(); }));
+      search.addEventListener('input', () => {
+        const query = search.value.toLowerCase();
+        items.forEach((item) => { item.closest('li').hidden = !item.textContent.toLowerCase().includes(query); });
+      });
+      search.focus();
+    }
+  });
+}
+
+function connectLiveEvents() {
+  clearTimeout(reconnectTimer);
+  socket?.close();
+  const state = getState();
   if (!state.projectId) return;
-  const active = document.querySelector('.tab-btn.active').dataset.tab;
-  if (active === 'dashboard') initDashboard(state.projectId);
-  if (active === 'agent') initAgent(state.projectId);
-  if (active === 'timeline') initTimeline(state.projectId);
+  updateState({ connection: 'connecting' });
+  const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+  socket = new WebSocket(`${protocol}://${location.host}/ws?projectId=${state.projectId}&after=${state.lastSequence}`);
+  socket.addEventListener('open', () => updateConnection('connected'));
+  socket.addEventListener('message', (event) => {
+    const message = JSON.parse(event.data);
+    if (message.type === 'event') applyEvent(message);
+  });
+  socket.addEventListener('close', () => {
+    updateConnection('offline');
+    reconnectTimer = setTimeout(() => {
+      if (getState().projectId === state.projectId) connectLiveEvents();
+    }, 1800);
+  });
 }
 
-setupTabs();
-loadProjects();
+function updateConnection(connection) {
+  updateState({ connection });
+  const pill = document.getElementById('connectionPill');
+  if (pill) { pill.dataset.state = connection; pill.textContent = connection; }
+}
+
+window.addEventListener('hashchange', () => { setRoute(routeFromHash()); renderShell(); });
+window.addEventListener('keydown', (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+    event.preventDefault();
+    openCommandPalette();
+  }
+});
+
+async function bootstrap() {
+  app.innerHTML = '<div class="loading-screen"><div class="loading-mark"><div class="loading-orbit"></div><span>Opening local control plane…</span></div></div>';
+  try {
+    const projects = await api.listProjects();
+    const remembered = Number(localStorage.getItem('pmcp.projectId'));
+    const selected = projects.find((project) => project.id === remembered)?.id || projects[0]?.id || null;
+    updateState({ projects, projectId: selected, route: routeFromHash() });
+    renderShell();
+    if (selected) connectLiveEvents();
+    else openOnboarding();
+  } catch (error) {
+    app.innerHTML = `<div class="loading-screen"><div class="empty-state"><div><div class="empty-state-mark">!</div><h1>Project MCP could not start</h1><p>${escapeHtml(error.message)}</p></div></div></div>`;
+  }
+}
+
+bootstrap();
