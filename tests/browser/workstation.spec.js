@@ -17,6 +17,20 @@ async function ensureProject(request) {
   return (await created.json()).data;
 }
 
+async function createProject(request, key, name) {
+  const created = await request.post('/api/v1/projects', {
+    headers: { 'Idempotency-Key': key },
+    data: {
+      name,
+      repoPath: '/tmp/pmcp-browser-project',
+      baseBranch: 'main',
+      stableBranch: 'stable',
+      productionBranch: 'production'
+    }
+  });
+  return (await created.json()).data;
+}
+
 test('onboards a project and exposes keyboard-first workstation navigation', async ({ page }) => {
   const browserErrors = [];
   page.on('pageerror', (error) => browserErrors.push(error.message));
@@ -76,4 +90,35 @@ test('shows cross-milestone gates and follows live execution', async ({ page, re
   await page.getByRole('button', { name: 'Run A-2' }).click();
   await expect(page.getByTestId('node-step-a-2')).toHaveAttribute('data-status', /running|review/);
   await expect(page.getByRole('complementary', { name: 'Agent activity' })).toContainText('A-2');
+});
+
+test('review center refuses stale evidence and explains why', async ({ page, request }) => {
+  const project = await createProject(request, 'browser-review-project', 'Review fixture');
+  await request.put(`/api/v1/projects/${project.id}/timeline`, {
+    headers: { 'Idempotency-Key': 'browser-review-timeline' },
+    data: {
+      nodes: [
+        { id: 'review-milestone', key: 'R', kind: 'milestone', title: 'Review' },
+        { id: 'review-step', key: 'R-1', kind: 'step', parentId: 'review-milestone', title: 'Visual review' }
+      ],
+      edges: [],
+      gates: [{ id: 'review-gate', nodeId: 'review-step', type: 'approval', title: 'Human approval' }]
+    }
+  });
+  await request.post(`/api/v1/projects/${project.id}/gates/review-gate/evidence`, {
+    headers: { 'Idempotency-Key': 'browser-stale-evidence' },
+    data: { kind: 'visual', headSha: 'old', artifactPath: 'screenshots/review.png' }
+  });
+
+  await page.goto('/#/reviews');
+  await page.getByLabel('Active project').selectOption(String(project.id));
+  await expect(page.getByText('Evidence is stale')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Approve step' })).toBeDisabled();
+});
+
+test('settings always retains the base branch as protected', async ({ page, request }) => {
+  await ensureProject(request);
+  await page.goto('/#/settings');
+  await expect(page.getByLabel('main protected')).toBeChecked();
+  await expect(page.getByLabel('main protected')).toBeDisabled();
 });

@@ -1,12 +1,123 @@
+import { notFound, validation } from '../domain/errors.js';
+import { runIdempotent } from './idempotency.js';
+
+function required(value, field, max = 10_000) {
+  const text = String(value ?? '').trim();
+  if (!text) throw validation(`${field} is required`, { field });
+  if (text.length > max) throw validation(`${field} is too long`, { field, max });
+  return text;
+}
+
 export class DashboardService {
-  constructor(db) {
+  constructor(db, eventStore, projectService, gitAdapter) {
     this.db = db;
+    this.events = eventStore;
+    this.projects = projectService;
+    this.git = gitAdapter;
+  }
+
+  #note(row) {
+    return {
+      ...row,
+      tags: this.db.prepare(
+        `SELECT tags.id, tags.name, tags.color FROM tags
+         JOIN note_tags ON note_tags.tag_id = tags.id
+         WHERE note_tags.note_id = ? ORDER BY tags.name`
+      ).all(row.id)
+    };
+  }
+
+  addIssue(projectId, input, context) {
+    return runIdempotent(this.db, context, { command: 'dashboard.addIssue', projectId, input }, () => {
+      this.projects.get(projectId);
+      const title = required(input.title, 'title', 500);
+      let id;
+      this.events.append({
+        projectId, type: 'issue.created', actor: context.actor,
+        correlationId: context.correlationId, payload: { title, branch: input.branch || null }
+      }, () => {
+        id = Number(this.db.prepare('INSERT INTO issues(project_id, title, branch) VALUES (?, ?, ?)')
+          .run(projectId, title, input.branch || null).lastInsertRowid);
+      });
+      return this.db.prepare('SELECT * FROM issues WHERE id = ?').get(id);
+    });
+  }
+
+  updateIssue(projectId, issueId, input, context) {
+    return runIdempotent(this.db, context, { command: 'dashboard.updateIssue', projectId, issueId, input }, () => {
+      const issue = this.db.prepare('SELECT * FROM issues WHERE project_id = ? AND id = ?').get(projectId, issueId);
+      if (!issue) throw notFound('Issue', issueId);
+      const status = required(input.status, 'status', 30);
+      if (!['open', 'in_progress', 'closed'].includes(status)) {
+        throw validation('Unknown issue status', { field: 'status' });
+      }
+      this.events.append({
+        projectId, type: 'issue.status.updated', actor: context.actor,
+        correlationId: context.correlationId, payload: { issueId, status }
+      }, () => this.db.prepare('UPDATE issues SET status = ? WHERE project_id = ? AND id = ?')
+        .run(status, projectId, issueId));
+      return this.db.prepare('SELECT * FROM issues WHERE id = ?').get(issueId);
+    });
+  }
+
+  addNote(projectId, input, context) {
+    return runIdempotent(this.db, context, { command: 'dashboard.addNote', projectId, input }, () => {
+      this.projects.get(projectId);
+      const body = required(input.body, 'body');
+      const tags = [...new Set((input.tags || []).map((tag) => required(tag, 'tag', 80)))].sort();
+      let id;
+      this.events.append({
+        projectId, type: 'note.created', actor: context.actor,
+        correlationId: context.correlationId, payload: { body, tags }
+      }, () => {
+        id = Number(this.db.prepare('INSERT INTO notes(project_id, body) VALUES (?, ?)').run(projectId, body).lastInsertRowid);
+        for (const tag of tags) {
+          this.db.prepare('INSERT INTO tags(name) VALUES (?) ON CONFLICT(name) DO NOTHING').run(tag);
+          this.db.prepare(
+            'INSERT INTO note_tags(note_id, tag_id) SELECT ?, id FROM tags WHERE name = ?'
+          ).run(id, tag);
+        }
+      });
+      return this.#note(this.db.prepare('SELECT * FROM notes WHERE id = ?').get(id));
+    });
+  }
+
+  async syncGit(projectId, context) {
+    const project = this.projects.get(projectId);
+    const commits = await this.git.history(project.repoPath, project.baseBranch, 100);
+    return runIdempotent(this.db, context, { command: 'dashboard.syncGit', projectId }, () => {
+      this.events.append({
+        projectId, type: 'git.history.observed', actor: context.actor,
+        correlationId: context.correlationId, payload: { branch: project.baseBranch, count: commits.length }
+      }, () => {
+        const insert = this.db.prepare(
+          `INSERT INTO git_events(project_id, commit_hash, author, message, branch, committed_at)
+           VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(project_id, commit_hash) DO UPDATE SET
+           author = excluded.author, message = excluded.message, branch = excluded.branch,
+           committed_at = excluded.committed_at`
+        );
+        for (const commit of commits) insert.run(projectId, commit.hash, commit.author, commit.message, project.baseBranch, commit.committedAt);
+      });
+      return this.db.prepare('SELECT * FROM git_events WHERE project_id = ? ORDER BY committed_at DESC LIMIT 100').all(projectId);
+    });
   }
 
   summary(projectId) {
+    const timelineCounts = Object.fromEntries(this.db.prepare(
+      `SELECT status, COUNT(*) AS count FROM timeline_nodes
+       WHERE project_id = ? AND kind = 'step' GROUP BY status`
+    ).all(projectId).map((row) => [row.status, row.count]));
+    const issues = this.db.prepare('SELECT * FROM issues WHERE project_id = ? ORDER BY id DESC').all(projectId);
     return {
-      issues: this.db.prepare('SELECT * FROM issues WHERE project_id = ? ORDER BY id DESC').all(projectId),
-      notes: this.db.prepare('SELECT * FROM notes WHERE project_id = ? ORDER BY id DESC').all(projectId),
+      metrics: {
+        activeRuns: this.db.prepare("SELECT COUNT(*) AS count FROM runs WHERE project_id = ? AND status IN ('starting','running')").get(projectId).count,
+        blockedGates: this.db.prepare("SELECT COUNT(*) AS count FROM gates WHERE project_id = ? AND blocking = 1 AND status != 'passed'").get(projectId).count,
+        reviewQueue: this.db.prepare("SELECT COUNT(*) AS count FROM timeline_nodes WHERE project_id = ? AND status = 'review'").get(projectId).count,
+        openIssues: issues.filter((issue) => issue.status !== 'closed').length
+      },
+      timelineCounts,
+      issues,
+      notes: this.db.prepare('SELECT * FROM notes WHERE project_id = ? ORDER BY id DESC').all(projectId).map((row) => this.#note(row)),
       gitEvents: this.db.prepare('SELECT * FROM git_events WHERE project_id = ? ORDER BY committed_at DESC LIMIT 100').all(projectId),
       activity: this.db.prepare('SELECT * FROM activity WHERE project_id = ? ORDER BY id DESC LIMIT 100').all(projectId)
     };

@@ -44,6 +44,8 @@ test('MCP exposes compact timeline and review tools', async () => {
     assert.ok(names.includes('timeline_replace_draft'));
     assert.ok(names.includes('step_start'));
     assert.ok(names.includes('review_get'));
+    assert.ok(names.includes('gate_submit_evidence'));
+    assert.equal(names.includes('gate_decide'), false);
 
     const result = await fixture.client.callTool({
       name: 'timeline_get',
