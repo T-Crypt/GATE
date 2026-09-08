@@ -3,28 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>project-tracker</title>
+  <meta name="theme-color" content="#07090d" />
+  <meta name="description" content="Project MCP local AI development workstation" />
+  <title>Project MCP</title>
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
-  <div id="app">
-    <header class="topbar">
-      <div class="brand">project-tracker</div>
-      <select id="projectSelect"></select>
-      <nav class="tabs">
-        <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
-        <button class="tab-btn" data-tab="agent">Agent</button>
-        <button class="tab-btn" data-tab="timeline">Timeline</button>
-      </nav>
-    </header>
-
-    <main>
-      <section id="tab-dashboard" class="tab-panel active"></section>
-      <section id="tab-agent" class="tab-panel"></section>
-      <section id="tab-timeline" class="tab-panel"></section>
-    </main>
-  </div>
-
+  <div id="app" aria-live="polite"></div>
+  <noscript>Project MCP requires JavaScript to render the local workstation.</noscript>
   <script type="module" src="/js/app.js"></script>
 </body>
 </html>
