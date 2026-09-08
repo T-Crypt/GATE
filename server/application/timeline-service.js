@@ -62,7 +62,7 @@ function requiredText(value, field) {
   return result;
 }
 
-function normalizeGraph(graph) {
+export function normalizeTimelineGraph(graph) {
   if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) {
     throw validation('Timeline requires nodes and edges arrays');
   }
@@ -156,7 +156,7 @@ export class TimelineService {
   }
 
   replaceDraft(projectId, input, context) {
-    const graph = normalizeGraph(input);
+    const graph = normalizeTimelineGraph(input);
     return runIdempotent(
       this.db,
       context,
