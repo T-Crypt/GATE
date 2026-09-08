@@ -58,7 +58,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .workstation { display: grid; grid-template-columns: var(--sidebar) minmax(0,1fr) var(--activity); grid-template-rows: var(--topbar) calc(100vh - var(--topbar)); min-height: 100vh; }
-.topbar { position: relative; z-index: 20; grid-column: 1/-1; display: grid; grid-template-columns: var(--sidebar) minmax(0,1fr) var(--activity); align-items: center; border-bottom: 1px solid var(--line); background: rgba(6,8,12,.82); backdrop-filter: blur(22px) saturate(130%); }
+.topbar { position: relative; z-index: 20; grid-column: 1/-1; display: grid; grid-template-columns: var(--sidebar) minmax(0,1fr) var(--activity); align-items: center; border-bottom: 1px solid var(--line); background: rgba(6,8,12,.82); backdrop-filter: blur(14px) saturate(125%); }
 .brand-wrap, .project-bar, .system-bar { min-width: 0; padding: 0 18px; }
 .brand-wrap { display: flex; align-items: center; gap: 10px; }
 .brand-mark { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid rgba(100,216,255,.3); border-radius: 9px; background: linear-gradient(145deg, rgba(100,216,255,.15), rgba(157,140,255,.09)); box-shadow: inset 0 0 18px rgba(100,216,255,.07), 0 0 18px rgba(100,216,255,.06); color: var(--cyan); font: 800 11px ui-monospace, monospace; }
@@ -75,7 +75,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .icon-button:hover, .nav-toggle:hover { border-color: var(--line-strong); background: var(--surface-hover); color: var(--text); }
 .nav-toggle { display: none; }
 
-.sidebar { z-index: 10; grid-column: 1; grid-row: 2; overflow-y: auto; padding: 18px 12px; border-right: 1px solid var(--line); background: rgba(7,10,15,.62); backdrop-filter: blur(18px); }
+.sidebar { z-index: 10; grid-column: 1; grid-row: 2; overflow-y: auto; padding: 18px 12px; border-right: 1px solid var(--line); background: rgba(7,10,15,.78); backdrop-filter: blur(10px); }
 .nav-label { margin: 12px 10px 8px; color: var(--faint); font: 9px/1 ui-monospace, monospace; letter-spacing: .14em; text-transform: uppercase; }
 .nav-list { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
 .nav-link { display: flex; align-items: center; gap: 11px; min-height: 40px; padding: 0 11px; border: 1px solid transparent; border-radius: 10px; color: var(--muted); text-decoration: none; transition: 140ms ease; }
@@ -102,8 +102,11 @@ h3 { font-size: 13px; letter-spacing: -.01em; }
 .button:hover { background: var(--surface-hover); color: var(--text); }
 .button.primary { border-color: rgba(100,216,255,.35); background: linear-gradient(135deg, rgba(100,216,255,.18), rgba(91,147,255,.13)); color: #e9faff; box-shadow: inset 0 1px rgba(255,255,255,.08), 0 8px 25px rgba(39,141,191,.08); }
 .button.danger { border-color: rgba(255,126,145,.3); background: var(--red-soft); color: var(--red); }
-.panel { border: 1px solid var(--line); border-radius: var(--radius-lg); background: linear-gradient(145deg, rgba(20,25,35,.77), rgba(11,14,20,.71)); box-shadow: inset 0 1px rgba(255,255,255,.025), var(--shadow); backdrop-filter: blur(16px) saturate(120%); }
-.panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+.panel { position: relative; border: 1px solid var(--line); border-radius: var(--radius-lg); background: linear-gradient(145deg, rgba(20,25,35,.9), rgba(11,14,20,.87)); box-shadow: inset 0 1px rgba(255,255,255,.025), var(--shadow); backdrop-filter: blur(9px) saturate(112%); }
+.panel::before, .panel::after { position: absolute; z-index: 1; width: 10px; height: 10px; border: 1px solid var(--line-strong); content: ""; opacity: .55; pointer-events: none; }
+.panel::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; border-top-left-radius: var(--radius-lg); }
+.panel::after { right: -1px; bottom: -1px; border-width: 0 1px 1px 0; border-bottom-right-radius: var(--radius-lg); }
+.panel-header { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
 .panel-header h2, .panel-header h3 { margin: 0; }
 .panel-body { padding: 18px; }
 .placeholder-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
@@ -117,7 +120,7 @@ h3 { font-size: 13px; letter-spacing: -.01em; }
 .empty-state p { max-width: 450px; margin: 0 auto; color: var(--muted); }
 .empty-actions { justify-content: center; margin-top: 18px; }
 
-.activity-rail { grid-column: 3; grid-row: 2; min-width: 0; overflow: auto; border-left: 1px solid var(--line); background: rgba(7,10,15,.68); backdrop-filter: blur(18px); }
+.activity-rail { grid-column: 3; grid-row: 2; min-width: 0; overflow: auto; border-left: 1px solid var(--line); background: rgba(7,10,15,.82); backdrop-filter: blur(10px); }
 .activity-head { padding: 18px; border-bottom: 1px solid var(--line); }
 .activity-head h2 { margin: 0 0 4px; font-size: 13px; }
 .activity-head p { margin: 0; color: var(--muted); font-size: 11px; }
@@ -127,7 +130,7 @@ h3 { font-size: 13px; letter-spacing: -.01em; }
 .rail-card strong { display: block; margin-bottom: 5px; font-size: 11px; }
 .rail-card p { margin: 0; color: var(--muted); font-size: 11px; }
 
-dialog { width: min(560px,calc(100vw - 28px)); max-height: calc(100vh - 40px); padding: 0; overflow: auto; border: 1px solid var(--line-strong); border-radius: 22px; background: rgba(12,16,23,.96); color: var(--text); box-shadow: 0 34px 120px rgba(0,0,0,.7), inset 0 1px rgba(255,255,255,.04); backdrop-filter: blur(28px) saturate(140%); }
+dialog { width: min(560px,calc(100vw - 28px)); max-height: calc(100vh - 40px); padding: 0; overflow: auto; border: 1px solid var(--line-strong); border-radius: 22px; background: rgba(10,13,19,.98); color: var(--text); box-shadow: 0 34px 120px rgba(0,0,0,.7), inset 0 1px rgba(255,255,255,.04); backdrop-filter: blur(16px) saturate(130%); }
 dialog::backdrop { background: rgba(1,3,6,.76); backdrop-filter: blur(7px); }
 .dialog-header { padding: 22px 24px 0; }
 .dialog-header h2 { margin-bottom: 5px; font-size: 21px; }
@@ -181,7 +184,34 @@ input::placeholder,textarea::placeholder { color: var(--faint); }
 .milestone-lane > header { display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 10px; align-items: start; padding: 4px 3px 13px; border-bottom: 1px solid var(--line); }
 .milestone-lane h2 { margin: 1px 0 3px; overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .milestone-lane header p { margin: 0; color: var(--faint); font-size: 10px; }
-.milestone-key { display: grid; width: 27px; height: 27px; place-items: center; border: 1px solid rgba(100,216,255,.26); border-radius: 8px; background: var(--cyan-soft); color: var(--cyan); font: 700 10px ui-monospace, monospace; }
+/* Fixed milestone-identity palette (CSP forbids inline style, so classes carry the hue).
+   Ten hues spread around the wheel, distinct from the semantic status colors above. */
+.mc-0 { --mc: hsl(12 75% 62%); --mc-soft: hsl(12 75% 62% / .16); --mc-glow: hsl(12 75% 62% / .45); }
+.mc-1 { --mc: hsl(48 78% 58%); --mc-soft: hsl(48 78% 58% / .16); --mc-glow: hsl(48 78% 58% / .45); }
+.mc-2 { --mc: hsl(84 62% 56%); --mc-soft: hsl(84 62% 56% / .16); --mc-glow: hsl(84 62% 56% / .45); }
+.mc-3 { --mc: hsl(152 60% 56%); --mc-soft: hsl(152 60% 56% / .16); --mc-glow: hsl(152 60% 56% / .45); }
+.mc-4 { --mc: hsl(178 68% 54%); --mc-soft: hsl(178 68% 54% / .16); --mc-glow: hsl(178 68% 54% / .45); }
+.mc-5 { --mc: hsl(202 82% 64%); --mc-soft: hsl(202 82% 64% / .16); --mc-glow: hsl(202 82% 64% / .45); }
+.mc-6 { --mc: hsl(228 78% 68%); --mc-soft: hsl(228 78% 68% / .16); --mc-glow: hsl(228 78% 68% / .45); }
+.mc-7 { --mc: hsl(262 72% 68%); --mc-soft: hsl(262 72% 68% / .16); --mc-glow: hsl(262 72% 68% / .45); }
+.mc-8 { --mc: hsl(300 62% 66%); --mc-soft: hsl(300 62% 66% / .16); --mc-glow: hsl(300 62% 66% / .45); }
+.mc-9 { --mc: hsl(336 74% 64%); --mc-soft: hsl(336 74% 64% / .16); --mc-glow: hsl(336 74% 64% / .45); }
+
+.milestone-lane { border-left: 3px solid var(--mc, var(--line-strong)); }
+.milestone-lane.flash { animation: laneFlash 900ms ease; }
+@keyframes laneFlash { 0%,100% { box-shadow: 0 16px 44px rgba(0,0,0,.24); } 30% { box-shadow: 0 16px 44px rgba(0,0,0,.24), 0 0 0 2px var(--mc, var(--cyan)), 0 0 26px var(--mc-glow, transparent); } }
+.milestone-key { display: grid; width: 27px; height: 27px; place-items: center; border: 1px solid var(--mc, rgba(100,216,255,.26)); border-radius: 8px; background: var(--mc-soft, var(--cyan-soft)); color: var(--mc, var(--cyan)); font: 700 10px ui-monospace, monospace; }
+.mile-gated-tag { margin-top: 4px !important; color: var(--amber) !important; font: 9px ui-monospace, monospace !important; text-transform: uppercase; letter-spacing: .04em; }
+
+.mile-rail { position: relative; display: flex; justify-content: space-between; gap: 4px; margin: -2px -2px 4px; padding: 16px 22px 14px; border-bottom: 1px solid var(--line); }
+.mile-rail::before { content: ""; position: absolute; left: 40px; right: 40px; top: 29px; height: 1px; background: repeating-linear-gradient(90deg, var(--line-strong) 0 6px, transparent 6px 11px); }
+.mile-marker { position: relative; z-index: 1; display: grid; justify-items: center; gap: 4px; padding: 0; border: 0; background: transparent; color: var(--text-soft); }
+.mile-dot { display: grid; width: 22px; height: 22px; place-items: center; border: 2px solid var(--mc, var(--cyan)); border-radius: 50%; background: var(--mc-soft, var(--cyan-soft)); box-shadow: 0 0 12px var(--mc-glow, transparent); color: var(--mc, var(--cyan)); font: 700 9px ui-monospace, monospace; transition: transform 140ms ease; }
+.mile-marker:hover .mile-dot, .mile-marker:focus-visible .mile-dot { transform: scale(1.12); }
+.mile-marker[data-locked="true"] .mile-dot { border-style: dashed; box-shadow: none; opacity: .6; }
+.mile-key { color: var(--text-soft); font: 700 10px ui-monospace, monospace; }
+.mile-marker small { color: var(--faint); font: 9px ui-monospace, monospace; letter-spacing: .05em; text-transform: uppercase; }
+.mile-marker[data-locked="true"] small { color: var(--amber); }
 .milestone-steps { display: grid; gap: 9px; padding-top: 10px; }
 .step-card { position: relative; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(145deg, rgba(24,30,41,.82), rgba(15,19,27,.9)); transition: 140ms ease; }
 .step-card:hover,.step-card:focus-visible { border-color: var(--line-strong); transform: translateY(-1px); box-shadow: 0 12px 34px rgba(0,0,0,.24); }

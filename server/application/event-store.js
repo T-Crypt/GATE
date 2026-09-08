@@ -24,6 +24,7 @@ export class EventStore {
     this.db = db;
     this.listeners = new Map();
     this.liveListeners = new Map();
+    this.globalListeners = new Set();
   }
 
   append(input, project = () => {}) {
@@ -119,7 +120,15 @@ export class EventStore {
     for (const listener of this.liveListeners.get(Number(projectId)) || []) listener(activity);
   }
 
+  // Fires for every event regardless of project; used by cross-cutting observers
+  // (e.g. the repo mirror) that shouldn't need a subscription per project id.
+  subscribeAll(listener) {
+    this.globalListeners.add(listener);
+    return () => this.globalListeners.delete(listener);
+  }
+
   #publish(event) {
     for (const listener of this.listeners.get(Number(event.projectId)) || []) listener(event);
+    for (const listener of this.globalListeners) listener(event);
   }
 }

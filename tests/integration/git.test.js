@@ -18,10 +18,10 @@ test('createRunWorktree branches from main without changing main', async () => {
       parentDir: fixture.worktreeParent
     });
 
-    assert.equal(worktree.branch, 'work/pmcp-run-7');
+    assert.equal(worktree.branch, 'work/gate-run-7');
     assert.equal(worktree.baseSha, mainBefore);
     assert.equal(fixture.run(['rev-parse', 'main']), mainBefore);
-    assert.equal((await git.inspect(worktree.path)).branch, 'work/pmcp-run-7');
+    assert.equal((await git.inspect(worktree.path)).branch, 'work/gate-run-7');
   } finally {
     fixture.close();
   }

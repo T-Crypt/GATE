@@ -43,7 +43,7 @@ export function registerTools(server, services) {
   server.registerTool(
     'project_list',
     {
-      description: 'List local Project MCP projects and their safety policy.',
+      description: 'List local Gate projects and their safety policy.',
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: false }
     },

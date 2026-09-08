@@ -8,7 +8,7 @@ async function ensureProject(request) {
     headers: { 'Idempotency-Key': 'browser-project' },
     data: {
       name: 'Workbench',
-      repoPath: '/tmp/pmcp-browser-project',
+      repoPath: '/tmp/gate-browser-project',
       baseBranch: 'main',
       stableBranch: 'stable',
       productionBranch: 'production'
@@ -22,7 +22,7 @@ async function createProject(request, key, name) {
     headers: { 'Idempotency-Key': key },
     data: {
       name,
-      repoPath: '/tmp/pmcp-browser-project',
+      repoPath: '/tmp/gate-browser-project',
       baseBranch: 'main',
       stableBranch: 'stable',
       productionBranch: 'production'
@@ -38,7 +38,7 @@ test('onboards a project and exposes keyboard-first workstation navigation', asy
 
   await expect(page.getByRole('heading', { name: 'Connect your first project' })).toBeVisible();
   await page.getByLabel('Project name').fill('Workbench');
-  await page.getByLabel('Repository path').fill('/tmp/pmcp-browser-project');
+  await page.getByLabel('Repository path').fill('/tmp/gate-browser-project');
   await page.getByLabel('Base branch').fill('main');
   await page.getByLabel('Stable branch').fill('stable');
   await page.getByLabel('Production branch').fill('production');

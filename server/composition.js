@@ -4,6 +4,7 @@ import { DashboardService } from './application/dashboard-service.js';
 import { EventStore } from './application/event-store.js';
 import { ExecutionService } from './application/execution-service.js';
 import { ProjectService } from './application/project-service.js';
+import { RepoMirrorService } from './application/repo-mirror.js';
 import { ReviewService } from './application/review-service.js';
 import { TimelineService } from './application/timeline-service.js';
 
@@ -21,6 +22,8 @@ export function buildServices({ db, config, providers }) {
         })
       ]
     ]);
+  const repoMirror = new RepoMirrorService({ db, projects });
+  repoMirror.attach(events);
   const gitAdapter = new GitAdapter();
   const execution = new ExecutionService({
     db,
@@ -41,6 +44,7 @@ export function buildServices({ db, config, providers }) {
     execution,
     reviews: new ReviewService(db, events),
     dashboard: new DashboardService(db, events, projects, gitAdapter),
+    repoMirror,
     providers: providerMap
   };
 }

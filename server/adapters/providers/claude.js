@@ -89,7 +89,7 @@ export class ClaudeProvider {
           '--json-schema',
           JSON.stringify(timelineSchema),
           '--permission-mode',
-          'plan'
+          'acceptEdits'
         ],
         cwd,
         input: prompt,

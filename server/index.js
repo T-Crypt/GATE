@@ -28,7 +28,7 @@ const app = createApp({ services, config, logger });
 const server = createHttpServer({ app, eventStore: services.events });
 
 if (config.allowRemoteBind) {
-  logger.warn({ host: config.host }, 'Project MCP is configured beyond loopback');
+  logger.warn({ host: config.host }, 'Gate is configured beyond loopback');
 }
 if (recovered.length > 0) {
   logger.warn({ recoveredRuns: recovered.map((run) => run.id) }, 'Interrupted runs require review');
@@ -37,7 +37,7 @@ if (recovered.length > 0) {
 server.listen(config.port, config.host, () => {
   logger.info(
     { host: config.host, port: config.port, migrationVersion },
-    'Project MCP workstation is ready'
+    'Gate workstation is ready'
   );
 });
 
@@ -45,7 +45,7 @@ let shuttingDown = false;
 function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
-  logger.info({ signal }, 'Stopping Project MCP');
+  logger.info({ signal }, 'Stopping Gate');
   const forceTimer = setTimeout(() => process.exit(1), 10_000);
   forceTimer.unref();
   server.close(() => {

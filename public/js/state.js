@@ -31,7 +31,7 @@ export function setProject(projectId) {
   state.projectId = Number(projectId);
   state.lastSequence = 0;
   state.events = [];
-  localStorage.setItem('pmcp.projectId', String(projectId));
+  localStorage.setItem('gate.projectId', String(projectId));
   emit();
 }
 

@@ -10,7 +10,7 @@ test('service composition shares one event-backed application core', () => {
   try {
     const services = buildServices({
       db: database.db,
-      config: { worktreeDir: '/tmp/pmcp-composition', outputLimitBytes: 20_000 },
+      config: { worktreeDir: '/tmp/gate-composition', outputLimitBytes: 20_000 },
       providers: new Map([['claude', new FakeProvider()]])
     });
     assert.equal(services.projects.events, services.events);

@@ -36,7 +36,7 @@ function renderShell() {
   app.innerHTML = `
     <div class="workstation">
       <header class="topbar">
-        <div class="brand-wrap"><span class="brand-mark" aria-hidden="true">PM</span><span class="brand-name">Project MCP<small>local control plane</small></span></div>
+        <div class="brand-wrap"><span class="brand-mark" aria-hidden="true">GT</span><span class="brand-name">Gate<small>local control plane</small></span></div>
         <div class="project-bar">
           <button class="nav-toggle" id="navToggle" aria-label="Open navigation">☰</button>
           <label class="sr-only" for="projectSelect">Active project</label>
@@ -80,7 +80,7 @@ function renderView() {
   if (!workspace) return;
   const state = getState();
   if (!activeProject(state)) {
-    workspace.innerHTML = `<section class="view">${viewHeader('Local workstation', 'Welcome to Project MCP', 'Connect a Git repository to begin planning and reviewing AI development.')}<div class="panel">${emptyState('＋', 'No project connected', 'Your repositories stay local. Project MCP creates isolated worktrees for automatic runs.', '<button class="button primary" id="connectEmpty">Connect project</button>')}</div></section>`;
+    workspace.innerHTML = `<section class="view">${viewHeader('Local workstation', 'Welcome to Gate', 'Connect a Git repository to begin planning and reviewing AI development.')}<div class="panel">${emptyState('＋', 'No project connected', 'Your repositories stay local. Gate creates isolated worktrees for automatic runs.', '<button class="button primary" id="connectEmpty">Connect project</button>')}</div></section>`;
     document.getElementById('connectEmpty')?.addEventListener('click', openOnboarding);
     return;
   }
@@ -124,7 +124,7 @@ async function refreshActivity() {
 function openOnboarding() {
   openDialog({
     label: 'Connect your first project',
-    content: `<div class="dialog-header"><p class="eyebrow">Local Git workspace</p><h2>Connect your first project</h2><p>Project MCP stores coordination data locally and never works directly on protected branches.</p></div><form class="dialog-body form-grid" id="projectForm"><div class="field"><label for="projectName">Project name</label><input id="projectName" name="name" autocomplete="off" required maxlength="120" placeholder="Aphotic workstation" /></div><div class="field"><label for="repoPath">Repository path</label><input id="repoPath" name="repoPath" autocomplete="off" required placeholder="/home/you/project" /><span class="field-hint">Absolute path to an existing local Git repository.</span></div><div class="form-split"><div class="field"><label for="baseBranch">Base branch</label><input id="baseBranch" name="baseBranch" value="main" required /></div><div class="field"><label for="stableBranch">Stable branch</label><input id="stableBranch" name="stableBranch" placeholder="stable" /></div></div><div class="field"><label for="productionBranch">Production branch</label><input id="productionBranch" name="productionBranch" placeholder="production" /></div><p class="form-error" id="projectError" role="alert"></p><div class="button-row"><button class="button primary" type="submit">Connect project</button></div></form>`,
+    content: `<div class="dialog-header"><p class="eyebrow">Local Git workspace</p><h2>Connect your first project</h2><p>Gate stores coordination data locally and never works directly on protected branches.</p></div><form class="dialog-body form-grid" id="projectForm"><div class="field"><label for="projectName">Project name</label><input id="projectName" name="name" autocomplete="off" required maxlength="120" placeholder="Aphotic workstation" /></div><div class="field"><label for="repoPath">Repository path</label><input id="repoPath" name="repoPath" autocomplete="off" required placeholder="/home/you/project" /><span class="field-hint">Absolute path to an existing local Git repository.</span></div><div class="form-split"><div class="field"><label for="baseBranch">Base branch</label><input id="baseBranch" name="baseBranch" value="main" required /></div><div class="field"><label for="stableBranch">Stable branch</label><input id="stableBranch" name="stableBranch" placeholder="stable" /></div></div><div class="field"><label for="productionBranch">Production branch</label><input id="productionBranch" name="productionBranch" placeholder="production" /></div><p class="form-error" id="projectError" role="alert"></p><div class="button-row"><button class="button primary" type="submit">Connect project</button></div></form>`,
     onMount(dialog) {
       const form = dialog.querySelector('#projectForm');
       form.addEventListener('submit', async (event) => {
@@ -214,14 +214,14 @@ async function bootstrap() {
   app.innerHTML = '<div class="loading-screen"><div class="loading-mark"><div class="loading-orbit"></div><span>Opening local control plane…</span></div></div>';
   try {
     const projects = await api.listProjects();
-    const remembered = Number(localStorage.getItem('pmcp.projectId'));
+    const remembered = Number(localStorage.getItem('gate.projectId'));
     const selected = projects.find((project) => project.id === remembered)?.id || projects[0]?.id || null;
     updateState({ projects, projectId: selected, route: routeFromHash() });
     renderShell();
     if (selected) connectLiveEvents();
     else openOnboarding();
   } catch (error) {
-    app.innerHTML = `<div class="loading-screen"><div class="empty-state"><div><div class="empty-state-mark">!</div><h1>Project MCP could not start</h1><p>${escapeHtml(error.message)}</p></div></div></div>`;
+    app.innerHTML = `<div class="loading-screen"><div class="empty-state"><div><div class="empty-state-mark">!</div><h1>Gate could not start</h1><p>${escapeHtml(error.message)}</p></div></div></div>`;
   }
 }
 

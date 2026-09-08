@@ -29,7 +29,7 @@ test('restart marks an orphaned active run interrupted without advancing its nod
 
 test('backup creates a checksummed SQLite copy and versioned JSON export', async () => {
   const database = createTestDatabase();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pmcp-backup-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-backup-'));
   try {
     database.db.prepare("INSERT INTO projects(name, repo_path, protected_branches_json) VALUES ('P', '/tmp/p', '[\"main\"]')").run();
     const backups = new BackupService(database.db);
