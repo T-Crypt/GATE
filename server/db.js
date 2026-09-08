@@ -1,17 +1,14 @@
-import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+import { loadConfig } from './config.js';
+import { openDatabase } from './db/database.js';
+import { migrate } from './db/migrate.js';
 
-const db = new Database(path.join(dataDir, 'tracker.db'));
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+const config = loadConfig();
+fs.mkdirSync(path.dirname(config.databaseFile), { recursive: true });
 
-const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
-db.exec(schema);
+const db = openDatabase({ filename: config.databaseFile });
+migrate(db);
 
 export default db;
