@@ -32,7 +32,7 @@ migrate(db);
 const services = buildServices({
   db,
   config,
-  providers: new Map([['claude', new FakeProvider()]])
+  providers: new Map([['claude', new FakeProvider({ delayMs: 1200 })]])
 });
 const app = createApp({ services, config });
 const server = createHttpServer({ app, eventStore: services.events, heartbeatMs: 1000 });

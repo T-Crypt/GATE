@@ -1,8 +1,9 @@
 export class FakeProvider {
-  constructor({ draft, exitCode = 0 } = {}) {
+  constructor({ draft, exitCode = 0, delayMs = 0 } = {}) {
     this.requests = [];
     this.draft = draft;
     this.exitCode = exitCode;
+    this.delayMs = delayMs;
     this.cancelled = new Set();
   }
 
@@ -15,7 +16,9 @@ export class FakeProvider {
     observer?.onOutput?.(`working:${request.nodeKey}\n`);
     return {
       sessionId: `fake-${this.requests.length}`,
-      completion: Promise.resolve({ exitCode: this.exitCode, signal: null }),
+      completion: new Promise((resolve) => {
+        setTimeout(() => resolve({ exitCode: this.exitCode, signal: null }), this.delayMs);
+      }),
       cancel: async () => {
         this.cancelled.add(request.runId);
       }

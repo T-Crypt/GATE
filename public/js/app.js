@@ -1,6 +1,8 @@
 import { api } from './api.js';
+import { appendLiveActivity, initAgent, renderActivityRail } from './agent.js';
 import { emptyState, escapeHtml, openDialog, showToast } from './components.js';
 import { applyEvent, getState, setProject, setRoute, updateState } from './state.js';
+import { initTimeline } from './timeline.js';
 
 const app = document.getElementById('app');
 let socket = null;
@@ -52,6 +54,7 @@ function renderShell() {
     </div>`;
   bindShell();
   renderView();
+  refreshActivity();
 }
 
 function bindShell() {
@@ -88,7 +91,22 @@ function renderView() {
     settings: ['Project policy', 'Settings', 'Provider, interaction level, branch safety, and local storage.']
   };
   const [eyebrow, title, description] = definitions[state.route];
-  workspace.innerHTML = `<section class="view">${viewHeader(eyebrow, title, description)}<div class="placeholder-grid"><article class="panel metric"><span class="metric-label">Active runs</span><strong class="metric-value">0</strong></article><article class="panel metric"><span class="metric-label">Blocked gates</span><strong class="metric-value">0</strong></article><article class="panel metric"><span class="metric-label">Review queue</span><strong class="metric-value">0</strong></article></div><div class="panel workstation-placeholder">${emptyState('◇', `${title} is ready`, 'The workstation shell is connected. Detailed controls load in this workspace.')}</div></section>`;
+  workspace.innerHTML = `<section class="view">${viewHeader(eyebrow, title, description)}<div id="viewContent"></div></section>`;
+  const content = workspace.querySelector('#viewContent');
+  const project = activeProject(state);
+  if (state.route === 'timeline') {
+    void initTimeline(content, { project, api, onRunChanged: async () => refreshActivity() });
+  } else if (state.route === 'agent') {
+    void initAgent(content, { project, api });
+  } else {
+    content.innerHTML = `<div class="placeholder-grid"><article class="panel metric"><span class="metric-label">Active runs</span><strong class="metric-value">0</strong></article><article class="panel metric"><span class="metric-label">Blocked gates</span><strong class="metric-value">0</strong></article><article class="panel metric"><span class="metric-label">Review queue</span><strong class="metric-value">0</strong></article></div><div class="panel workstation-placeholder">${emptyState('◇', `${title} is ready`, 'The workstation shell is connected. Detailed controls load in this workspace.')}</div>`;
+  }
+}
+
+async function refreshActivity() {
+  const container = document.getElementById('activityBody');
+  const project = activeProject();
+  if (container && project) await renderActivityRail(container, { project, api });
 }
 
 function openOnboarding() {
@@ -149,7 +167,14 @@ function connectLiveEvents() {
   socket.addEventListener('open', () => updateConnection('connected'));
   socket.addEventListener('message', (event) => {
     const message = JSON.parse(event.data);
-    if (message.type === 'event') applyEvent(message);
+    if (message.type === 'event') {
+      applyEvent(message);
+      if (getState().route === 'timeline') renderView();
+      void refreshActivity();
+    }
+    if (message.type === 'activity') {
+      appendLiveActivity(document.getElementById('activityBody'), message.activity);
+    }
   });
   socket.addEventListener('close', () => {
     updateConnection('offline');
