@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { withTransaction } from '../db/database.js';
+import { afterCommit, withTransaction } from '../db/database.js';
 import { AppError } from '../domain/errors.js';
 
 function decode(row) {
@@ -22,6 +22,7 @@ function decode(row) {
 export class EventStore {
   constructor(db) {
     this.db = db;
+    this.listeners = new Map();
   }
 
   append(input, project = () => {}) {
@@ -73,6 +74,7 @@ export class EventStore {
         )
       );
       project(event);
+      afterCommit(this.db, () => this.#publish(event));
       return event;
     });
   }
@@ -88,5 +90,20 @@ export class EventStore {
       )
       .all(projectId, sequence, safeLimit)
       .map(decode);
+  }
+
+  subscribe(projectId, listener) {
+    const key = Number(projectId);
+    if (!this.listeners.has(key)) this.listeners.set(key, new Set());
+    this.listeners.get(key).add(listener);
+    return () => {
+      const listeners = this.listeners.get(key);
+      listeners?.delete(listener);
+      if (listeners?.size === 0) this.listeners.delete(key);
+    };
+  }
+
+  #publish(event) {
+    for (const listener of this.listeners.get(Number(event.projectId)) || []) listener(event);
   }
 }
