@@ -9,3 +9,8 @@ playwright-report/
 
 # Internal planning docs, not part of the shipped project
 docs/superpowers/
+
+# Local Claude Code settings and session artifacts (never shared/committed)
+.claude/
+.claude-plans/
+CLAUDE.local.md

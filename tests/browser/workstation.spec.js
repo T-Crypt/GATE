@@ -122,3 +122,28 @@ test('settings always retains the base branch as protected', async ({ page, requ
   await expect(page.getByLabel('main protected')).toBeChecked();
   await expect(page.getByLabel('main protected')).toBeDisabled();
 });
+
+test('overview, issues, and git render distinct views instead of one shared dashboard', async ({ page, request }) => {
+  await ensureProject(request);
+
+  await page.goto('/#/overview');
+  await expect(page.getByRole('heading', { name: 'Recent issues' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Recent commits' })).toBeVisible();
+  await expect(page.locator('#issuesPanel')).toHaveCount(0);
+  await expect(page.locator('#gitPanel')).toHaveCount(0);
+  await expect(page.getByPlaceholder('Capture a local work item')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Sync/ })).toHaveCount(0);
+
+  await page.goto('/#/issues');
+  await expect(page.locator('#issuesPanel')).toBeVisible();
+  await expect(page.getByPlaceholder('Capture a local work item')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Notes' })).toBeVisible();
+  await expect(page.locator('#gitPanel')).toHaveCount(0);
+
+  await page.goto('/#/git');
+  await expect(page.locator('#gitPanel')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Sync/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Commits', exact: true })).toBeVisible();
+  await expect(page.locator('#issuesPanel')).toHaveCount(0);
+  await expect(page.getByPlaceholder('Capture a local work item')).toHaveCount(0);
+});

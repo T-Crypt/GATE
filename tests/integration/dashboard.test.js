@@ -32,3 +32,31 @@ test('dashboard commands persist local issues, tagged notes, and observed commit
     git.close();
   }
 });
+
+test('dashboard summary reports git worktree status and changed files', async () => {
+  const database = createTestDatabase();
+  const git = createGitFixture();
+  try {
+    const events = new EventStore(database.db);
+    const projects = new ProjectService(database.db, events);
+    const project = projects.create({ name: 'Status', repoPath: git.repoPath }, context('project'));
+    const dashboard = new DashboardService(database.db, events, projects, new GitAdapter());
+
+    const clean = await dashboard.summary(project.id);
+    assert.equal(clean.gitStatus.branch, 'main');
+    assert.equal(clean.gitStatus.dirty, false);
+    assert.deepEqual(clean.changedFiles, []);
+
+    await dashboard.syncGit(project.id, context('sync'));
+    git.write('README.md', '# fixture\nchanged\n');
+    git.run(['add', 'README.md']);
+    git.run(['commit', '-m', 'second']);
+
+    const after = await dashboard.summary(project.id);
+    assert.equal(after.gitStatus.dirty, false);
+    assert.deepEqual(after.changedFiles, ['README.md']);
+  } finally {
+    database.close();
+    git.close();
+  }
+});

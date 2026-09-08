@@ -253,19 +253,53 @@ input::placeholder,textarea::placeholder { color: var(--faint); }
 .metric.cyan .metric-value { color: var(--cyan); }
 .metric.amber .metric-value { color: var(--amber); }
 .metric.violet .metric-value { color: var(--violet); }
-.operations-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
-.notes-panel { grid-column: 1/-1; }
 .inline-form { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; margin-bottom: 14px; }
 .record-list { display: grid; gap: 8px; }
-.record-row,.commit-row,.note-row { padding: 11px; border: 1px solid var(--line); border-radius: 11px; background: rgba(255,255,255,.018); }
+.record-row,.note-row { padding: 11px; border: 1px solid var(--line); border-radius: 11px; background: rgba(255,255,255,.018); }
 .record-row { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 9px; }
-.record-row strong,.commit-row strong { overflow: hidden; color: var(--text-soft); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.record-row strong { overflow: hidden; color: var(--text-soft); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .compact-select { width: auto; min-height: 30px; padding: 4px 8px; font-size: 10px; }
-.commit-row { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 10px; }
-.commit-row code { color: var(--cyan); font-size: 10px; }
-.commit-row p,.note-row p { margin: 3px 0 0; color: var(--faint); font-size: 10px; }
+.note-row p { margin: 3px 0 0; color: var(--faint); font-size: 10px; }
 .note-list { margin-top: 14px; }
 .note-row .badge { margin: 8px 5px 0 0; }
+
+/* Overview: read-only recent-activity strips */
+.summary-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; margin-top: 14px; }
+.summary-strip-list { display: grid; gap: 6px; }
+.summary-strip-row { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 11px; }
+.summary-strip-row:last-child { border-bottom: 0; }
+.summary-strip-row strong { overflow: hidden; color: var(--text-soft); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.summary-strip-row code { color: var(--cyan); font-size: 10px; }
+.view-all-link { display: inline-block; margin-top: 12px; color: var(--cyan); font: 10px ui-monospace, monospace; letter-spacing: .04em; text-decoration: none; text-transform: uppercase; }
+.view-all-link:hover { text-decoration: underline; }
+
+/* Issues: status board */
+.issues-board { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin-top: 14px; }
+.issues-column { border: 1px solid var(--line); border-radius: var(--radius); background: rgba(255,255,255,.014); }
+.issues-column-head { display: flex; align-items: center; justify-content: space-between; padding: 11px 13px; border-bottom: 1px solid var(--line); color: var(--text-soft); font: 10px ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; }
+.issues-column-head span { color: var(--faint); }
+.issues-column-body { display: grid; gap: 8px; padding: 10px; }
+.issue-card { display: grid; gap: 7px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.02); }
+.issue-card strong { color: var(--text-soft); font-size: 11px; font-weight: 500; }
+.issue-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+/* Git: status strip + rail track (epiq-flavored dense monospace track) */
+.git-status-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: rgba(255,255,255,.016); font: 10px ui-monospace, monospace; }
+.git-status-strip .status-dot { width: 8px; height: 8px; }
+.git-status-strip .status-dot.dirty { background: var(--amber); box-shadow: 0 0 9px var(--amber); }
+.git-status-strip .status-dot.clean { background: var(--green); box-shadow: 0 0 9px var(--green); }
+.git-status-strip span { color: var(--muted); }
+.git-status-strip strong { color: var(--text-soft); font-weight: 600; }
+.changed-files-list { display: grid; gap: 4px; margin: 10px 0 0; }
+.changed-file-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,.014); color: var(--text-soft); font: 10px ui-monospace, monospace; }
+.rail-track { position: relative; display: grid; gap: 0; margin-top: 4px; padding-left: 18px; }
+.rail-track::before { position: absolute; top: 6px; bottom: 6px; left: 5px; width: 1px; background: var(--line-strong); content: ""; }
+.rail-row { position: relative; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 11px; }
+.rail-row:last-child { border-bottom: 0; }
+.rail-row::before { position: absolute; top: 50%; left: -18px; width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 7px var(--cyan); content: ""; transform: translateY(-50%); }
+.rail-row code { color: var(--cyan); font-size: 10px; }
+.rail-row strong { overflow: hidden; color: var(--text-soft); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.rail-row small { color: var(--faint); font-size: 9px; }
 .review-grid,.settings-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
 .review-card[data-state="stale"] { border-color: rgba(247,199,106,.3); }
 .review-card[data-state="fresh"] { border-color: rgba(111,231,173,.26); }
@@ -317,8 +351,7 @@ input::placeholder,textarea::placeholder { color: var(--faint); }
   .goal-panel { grid-template-columns: 1fr; }
   .goal-form { grid-template-columns: 1fr; }
   .timeline-toolbar { align-items: flex-start; flex-direction: column; }
-  .operations-grid,.review-grid,.settings-grid,.dashboard-metrics { grid-template-columns: 1fr; }
-  .notes-panel { grid-column: auto; }
+  .review-grid,.settings-grid,.dashboard-metrics,.summary-grid,.issues-board { grid-template-columns: 1fr; }
   .inline-form { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
