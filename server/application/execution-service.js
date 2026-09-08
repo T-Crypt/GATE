@@ -81,9 +81,30 @@ export class ExecutionService {
 
   async start(projectId, nodeId, context) {
     const project = this.projects.get(projectId);
-    const node = this.timeline.get(projectId).nodes.find((candidate) => candidate.id === nodeId);
+    const timeline = this.timeline.get(projectId);
+    const node = timeline.nodes.find((candidate) => candidate.id === nodeId);
     if (!node) throw notFound('Timeline node', nodeId);
     if (node.kind !== 'step') throw new AppError('STEP_REQUIRED', 'Only timeline steps can run');
+
+    const dependencies = timeline.edges
+      .filter((edge) => edge.toNodeId === node.id)
+      .map((edge) => timeline.nodes.find((candidate) => candidate.id === edge.fromNodeId))
+      .filter(Boolean);
+    const gates = timeline.gates.filter((gate) => gate.nodeId === node.id);
+    const readiness = deriveReadiness(node, dependencies, gates);
+    if (!['ready', 'running'].includes(readiness) && node.status !== 'ready') {
+      throw new AppError('STEP_BLOCKED', `Step ${node.key} has unmet dependencies or gates`, {
+        status: 409,
+        details: {
+          dependencies: dependencies.map((dependency) => ({
+            id: dependency.id,
+            key: dependency.key,
+            status: dependency.status
+          })),
+          gates: gates.map((gate) => ({ id: gate.id, type: gate.type, status: gate.status }))
+        }
+      });
+    }
 
     const active = this.db
       .prepare("SELECT id FROM runs WHERE project_id = ? AND status IN ('starting', 'running') LIMIT 1")
@@ -302,6 +323,13 @@ export class ExecutionService {
          VALUES (?, ?, 'agent.output', ?, ?)`
       )
       .run(projectId, runId, sanitized, JSON.stringify({ stream }));
+    this.events.publishLive(projectId, {
+      kind: 'agent.output',
+      runId,
+      chunk: sanitized,
+      stream,
+      timestamp: new Date().toISOString()
+    });
   }
 
   async #finish(runId, result) {

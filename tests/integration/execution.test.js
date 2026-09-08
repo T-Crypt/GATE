@@ -103,6 +103,20 @@ test('automatic mode starts only ready nodes in the assigned worktree', async ()
   }
 });
 
+test('direct execution cannot bypass an incomplete dependency', async () => {
+  const fixture = setup();
+  try {
+    await assert.rejects(
+      () => fixture.execution.start(fixture.project.id, 'blocked-step', context('direct-blocked')),
+      (error) => error.code === 'STEP_BLOCKED'
+    );
+    assert.equal(fixture.provider.requests.length, 0);
+  } finally {
+    fixture.close();
+    fixture.gitFixture.close();
+  }
+});
+
 test('provider launch never interpolates prompt text through a shell', async () => {
   const gitFixture = createGitFixture();
   const marker = path.join(gitFixture.root, 'must-not-exist');

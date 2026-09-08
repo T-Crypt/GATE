@@ -51,6 +51,12 @@ test('a reconnect replays events after the client sequence and then streams live
       await once(socket, 'message');
     }
     assert.ok(messages.some((message) => message.type === 'event' && message.sequence === 5));
+
+    events.publishLive(1, { kind: 'agent.output', runId: 'run-1', chunk: 'working\n' });
+    while (!messages.some((message) => message.type === 'activity')) {
+      await once(socket, 'message');
+    }
+    assert.equal(messages.find((message) => message.type === 'activity').activity.chunk, 'working\n');
   } finally {
     socket.close();
     server.close();

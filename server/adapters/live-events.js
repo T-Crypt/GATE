@@ -37,6 +37,9 @@ export function createHttpServer({ app, eventStore, heartbeatMs = 15_000 }) {
       delivered = event.sequence;
       send(socket, { type: 'event', sequence: event.sequence, event });
     });
+    const unsubscribeLive = eventStore.subscribeLive(projectId, (activity) => {
+      send(socket, { type: 'activity', activity });
+    });
     const heartbeat = setInterval(
       () => send(socket, { type: 'heartbeat', sequence: delivered, timestamp: new Date().toISOString() }),
       heartbeatMs
@@ -45,6 +48,7 @@ export function createHttpServer({ app, eventStore, heartbeatMs = 15_000 }) {
     socket.once('close', () => {
       clearInterval(heartbeat);
       unsubscribe();
+      unsubscribeLive();
     });
   });
 

@@ -1,115 +1,145 @@
-export async function initTimeline(projectId) {
-  const panel = document.getElementById('tab-timeline');
-  panel.innerHTML = `
-    <div class="card">
-      <h3>Milestones <button class="ghost" id="addMilestoneBtn" style="float:right;padding:2px 10px;">+ Add</button></h3>
-      <div class="timeline-track" id="track"></div>
-    </div>
-    <div id="modalRoot"></div>
-  `;
+import { emptyState, escapeHtml, showToast } from './components.js';
 
-  async function loadMilestones() {
-    const milestones = await (await fetch(`/api/projects/${projectId}/milestones`)).json();
-    const track = document.getElementById('track');
-    track.innerHTML = milestones.length
-      ? milestones.map(m => `
-        <div class="milestone-tile" data-id="${m.id}" style="border-color:${m.color};background:${m.color}22;">
-          <div class="m-title">${escapeHtml(m.title)}</div>
-          <div class="m-status">${m.status} · ${m.steps.length} step(s)</div>
-        </div>`).join('')
-      : `<div class="muted">No milestones yet. This is where the AI-predicted plan would land once the drafting flow is built — for now, add them manually.</div>`;
+const passedStatuses = new Set(['complete', 'approved']);
 
-    track.querySelectorAll('.milestone-tile').forEach(tile => {
-      tile.addEventListener('click', () => openMilestone(Number(tile.dataset.id), milestones));
-    });
-  }
-
-  document.getElementById('addMilestoneBtn').addEventListener('click', async () => {
-    const title = prompt('Milestone title:');
-    if (!title) return;
-    const color = prompt('Color (hex):', '#4f8cff');
-    await fetch(`/api/projects/${projectId}/milestones`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, color })
-    });
-    loadMilestones();
-  });
-
-  function openMilestone(id, milestones) {
-    const m = milestones.find(x => x.id === id);
-    const modalRoot = document.getElementById('modalRoot');
-    modalRoot.innerHTML = `
-      <div class="modal-backdrop" id="backdrop">
-        <div class="modal">
-          <h3 style="margin-top:0;">${escapeHtml(m.title)}
-            <span class="badge ${m.status}" style="margin-left:8px;">${m.status}</span>
-          </h3>
-          <div class="muted" style="margin-bottom:10px;">${escapeHtml(m.goal_note || 'No goal note.')}</div>
-
-          <div style="display:flex;gap:8px;margin-bottom:10px;">
-            <select id="statusSelect">
-              <option value="draft" ${m.status === 'draft' ? 'selected' : ''}>draft</option>
-              <option value="locked" ${m.status === 'locked' ? 'selected' : ''}>locked</option>
-              <option value="in_progress" ${m.status === 'in_progress' ? 'selected' : ''}>in_progress</option>
-              <option value="done" ${m.status === 'done' ? 'selected' : ''}>done</option>
-            </select>
-          </div>
-
-          <h4 style="margin-bottom:6px;">Prompt Steps</h4>
-          <div class="step-grid" id="stepGrid">
-            ${m.steps.map((s, i) => `
-              <div class="step-cell">
-                <span class="num">#${i + 1}</span>
-                <span class="badge ${s.status}">${s.status}</span>
-                <div style="margin-top:6px;">${escapeHtml(s.prompt_text)}</div>
-              </div>`).join('') || `<div class="muted">No steps yet.</div>`}
-          </div>
-
-          <div style="display:flex;gap:8px;margin-top:12px;">
-            <input type="text" id="newStepInput" placeholder="New prompt step..." />
-            <button class="primary" id="addStepBtn">Add</button>
-          </div>
-
-          <div style="margin-top:16px;text-align:right;">
-            <button class="ghost" id="closeModalBtn">Close</button>
-          </div>
-        </div>
-      </div>
-    `;
-
-    document.getElementById('closeModalBtn').addEventListener('click', () => modalRoot.innerHTML = '');
-    document.getElementById('backdrop').addEventListener('click', (e) => {
-      if (e.target.id === 'backdrop') modalRoot.innerHTML = '';
-    });
-
-    document.getElementById('statusSelect').addEventListener('change', async (e) => {
-      await fetch(`/api/milestones/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: e.target.value })
-      });
-      loadMilestones();
-    });
-
-    document.getElementById('addStepBtn').addEventListener('click', async () => {
-      const input = document.getElementById('newStepInput');
-      if (!input.value.trim()) return;
-      await fetch(`/api/milestones/${id}/steps`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt_text: input.value.trim() })
-      });
-      modalRoot.innerHTML = '';
-      await loadMilestones();
-    });
-  }
-
-  loadMilestones();
+function gateLabel(type) {
+  return ({ code: 'Code', test: 'Test', build: 'Build', plan: 'Plan', visual: 'Visual', approval: 'Approval' })[type] || type;
 }
 
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, s => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[s]));
+function statusLabel(status) {
+  return String(status || 'planned').replaceAll('_', ' ');
+}
+
+function runnable(node, timeline) {
+  if (!['planned', 'ready', 'blocked'].includes(node.status)) return false;
+  const dependencies = timeline.edges
+    .filter((edge) => edge.toNodeId === node.id)
+    .map((edge) => timeline.nodes.find((candidate) => candidate.id === edge.fromNodeId))
+    .filter(Boolean);
+  const gates = timeline.gates.filter((gate) => gate.nodeId === node.id && gate.blocking);
+  return dependencies.every((dependency) => passedStatuses.has(dependency.status)) &&
+    gates.every((gate) => ['passed', 'approved', 'waived'].includes(gate.status));
+}
+
+function renderStep(step, timeline) {
+  const gates = timeline.gates.filter((gate) => gate.nodeId === step.id);
+  const canRun = runnable(step, timeline);
+  return `
+    <article class="step-card" data-testid="node-${escapeHtml(step.id)}" data-node-id="${escapeHtml(step.id)}" data-status="${escapeHtml(step.status)}" tabindex="0">
+      <div class="step-topline"><span class="step-key">${escapeHtml(step.key)}</span><span class="status-dot ${escapeHtml(step.status)}"></span><span class="step-status">${escapeHtml(statusLabel(step.status))}</span></div>
+      <h3>${escapeHtml(step.title)}</h3>
+      ${step.description ? `<p>${escapeHtml(step.description)}</p>` : ''}
+      <div class="gate-list">${gates.map((gate) => `<span class="gate-chip ${escapeHtml(gate.status)}"><span>${escapeHtml(gateLabel(gate.type))}</span><small>${escapeHtml(gate.status)}</small></span>`).join('')}</div>
+      <div class="step-footer"><span>${step.progress}%</span><button class="step-run" data-run-node="${escapeHtml(step.id)}" ${canRun ? '' : 'disabled'} aria-label="Run ${escapeHtml(step.key)}">Run</button></div>
+      <progress class="progress-track" max="100" value="${Number(step.progress) || 0}" aria-label="${escapeHtml(step.key)} progress"></progress>
+    </article>`;
+}
+
+function dependencyText(edge, timeline) {
+  const from = timeline.nodes.find((node) => node.id === edge.fromNodeId);
+  const to = timeline.nodes.find((node) => node.id === edge.toNodeId);
+  if (!from || !to) return '';
+  return `${from.key} ${edge.type.endsWith('_gate') ? 'gates' : 'blocks'} ${to.key}`;
+}
+
+function drawConnections(container, timeline) {
+  const canvas = container.querySelector('.timeline-canvas');
+  const svg = container.querySelector('.dependency-svg');
+  if (!canvas || !svg) return;
+  const bounds = canvas.getBoundingClientRect();
+  svg.setAttribute('viewBox', `0 0 ${bounds.width} ${bounds.height}`);
+  svg.innerHTML = timeline.edges.map((edge) => {
+    const from = canvas.querySelector(`[data-node-id="${CSS.escape(edge.fromNodeId)}"]`);
+    const to = canvas.querySelector(`[data-node-id="${CSS.escape(edge.toNodeId)}"]`);
+    if (!from || !to) return '';
+    const a = from.getBoundingClientRect();
+    const b = to.getBoundingClientRect();
+    const x1 = a.right - bounds.left;
+    const y1 = a.top + a.height / 2 - bounds.top;
+    const x2 = b.left - bounds.left;
+    const y2 = b.top + b.height / 2 - bounds.top;
+    const bend = Math.max(42, Math.abs(x2 - x1) * 0.42);
+    return `<path d="M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}" data-edge-type="${escapeHtml(edge.type)}"></path>`;
+  }).join('');
+}
+
+export async function initTimeline(container, { project, api, onRunChanged }) {
+  container.innerHTML = '<div class="panel timeline-loading"><div class="loading-orbit"></div><span>Loading timeline…</span></div>';
+  try {
+    const timeline = await api.getTimeline(project.id);
+    const milestones = timeline.nodes.filter((node) => node.kind === 'milestone');
+    const completed = timeline.nodes.filter((node) => node.kind === 'step' && node.status === 'complete').length;
+    const steps = timeline.nodes.filter((node) => node.kind === 'step').length;
+    container.innerHTML = `
+      <section class="goal-panel panel">
+        <div><p class="eyebrow">Claude planning</p><h2>Turn a goal into guided execution</h2><p>Claude proposes milestones, dependencies, and gates. Nothing runs until the draft is accepted.</p></div>
+        <form id="goalForm" class="goal-form"><label class="sr-only" for="goalInput">Project goal</label><textarea id="goalInput" rows="2" placeholder="Describe the outcome, constraints, and review expectations…" required minlength="3"></textarea><button class="button primary" type="submit">Draft timeline</button></form>
+        <div id="draftResult"></div>
+      </section>
+      <section class="timeline-toolbar">
+        <div class="timeline-summary"><span><strong>${completed}</strong> / ${steps} steps complete</span><span>${timeline.edges.length} dependencies</span><span>${timeline.gates.length} gates</span></div>
+        <div class="button-row"><button class="button" id="fitTimeline">Fit timeline</button><button class="button primary" id="scheduleNext" ${steps ? '' : 'disabled'}>Start automatic execution</button></div>
+      </section>
+      ${timeline.edges.length ? `<div class="dependency-strip" aria-label="Timeline dependencies">${timeline.edges.map((edge) => `<span class="dependency-chip"><span class="edge-glyph">↗</span>${escapeHtml(dependencyText(edge, timeline))}<small>${escapeHtml(gateLabel(edge.type.replace('_gate', '')))}</small></span>`).join('')}</div>` : ''}
+      <section class="panel timeline-shell">
+        <div class="timeline-ruler"><span>Plan</span><span>Build</span><span>Verify</span><span>Review</span></div>
+        ${milestones.length ? `<div class="timeline-scroll"><div class="timeline-canvas"><svg class="dependency-svg" aria-hidden="true"></svg>${milestones.map((milestone) => `<section class="milestone-lane"><header><span class="milestone-key">${escapeHtml(milestone.key)}</span><div><h2>${escapeHtml(milestone.title)}</h2><p>${escapeHtml(milestone.description || `${timeline.nodes.filter((node) => node.parentId === milestone.id).length} guided steps`)}</p></div><span class="badge">${escapeHtml(statusLabel(milestone.status))}</span></header><div class="milestone-steps">${timeline.nodes.filter((node) => node.parentId === milestone.id).map((step) => renderStep(step, timeline)).join('')}</div></section>`).join('')}</div></div>` : emptyState('TL', 'No timeline yet', 'Describe the outcome above. Claude can propose a dependency-aware plan for review.')}
+      </section>`;
+
+    const redraw = () => drawConnections(container, timeline);
+    requestAnimationFrame(redraw);
+    const observer = new ResizeObserver(redraw);
+    observer.observe(container.querySelector('.timeline-shell'));
+
+    container.querySelector('#goalForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = event.currentTarget.querySelector('button');
+      const goal = event.currentTarget.querySelector('textarea').value.trim();
+      button.disabled = true;
+      button.textContent = 'Drafting…';
+      try {
+        const draft = await api.draftTimeline(project.id, goal);
+        const result = container.querySelector('#draftResult');
+        result.innerHTML = `<div class="draft-review"><div><strong>Proposed timeline</strong><span>${draft.graph.nodes.length} nodes · ${draft.graph.edges.length} dependencies</span></div><button class="button primary" id="acceptDraft">Accept draft</button></div>`;
+        result.querySelector('#acceptDraft').addEventListener('click', async () => {
+          await api.acceptTimelineDraft(project.id, draft.id);
+          showToast('Timeline draft accepted');
+          await initTimeline(container, { project, api, onRunChanged });
+        });
+      } catch (error) {
+        showToast(error.message, 'error');
+        button.disabled = false;
+        button.textContent = 'Draft timeline';
+      }
+    });
+
+    container.querySelectorAll('[data-run-node]').forEach((button) => button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        await api.startStep(project.id, button.dataset.runNode);
+        showToast('Claude run started');
+        await onRunChanged?.();
+        await initTimeline(container, { project, api, onRunChanged });
+      } catch (error) {
+        showToast(error.message, 'error');
+        button.disabled = false;
+      }
+    }));
+    container.querySelector('#scheduleNext')?.addEventListener('click', async () => {
+      try {
+        const runs = await api.schedule(project.id);
+        showToast(runs.length ? 'Automatic execution started' : 'No step is ready');
+        await onRunChanged?.();
+        await initTimeline(container, { project, api, onRunChanged });
+      } catch (error) {
+        showToast(error.message, 'error');
+      }
+    });
+    container.querySelector('#fitTimeline')?.addEventListener('click', () => {
+      container.querySelector('.timeline-scroll')?.scrollTo({ left: 0, behavior: 'smooth' });
+    });
+  } catch (error) {
+    container.innerHTML = `<div class="panel">${emptyState('!', 'Timeline unavailable', error.message, '<button class="button" id="retryTimeline">Retry</button>')}</div>`;
+    container.querySelector('#retryTimeline')?.addEventListener('click', () => initTimeline(container, { project, api, onRunChanged }));
+  }
 }

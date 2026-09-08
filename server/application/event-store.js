@@ -23,6 +23,7 @@ export class EventStore {
   constructor(db) {
     this.db = db;
     this.listeners = new Map();
+    this.liveListeners = new Map();
   }
 
   append(input, project = () => {}) {
@@ -101,6 +102,21 @@ export class EventStore {
       listeners?.delete(listener);
       if (listeners?.size === 0) this.listeners.delete(key);
     };
+  }
+
+  subscribeLive(projectId, listener) {
+    const key = Number(projectId);
+    if (!this.liveListeners.has(key)) this.liveListeners.set(key, new Set());
+    this.liveListeners.get(key).add(listener);
+    return () => {
+      const listeners = this.liveListeners.get(key);
+      listeners?.delete(listener);
+      if (listeners?.size === 0) this.liveListeners.delete(key);
+    };
+  }
+
+  publishLive(projectId, activity) {
+    for (const listener of this.liveListeners.get(Number(projectId)) || []) listener(activity);
   }
 
   #publish(event) {

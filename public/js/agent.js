@@ -1,105 +1,50 @@
-let ws = null;
-let currentSessionId = null;
+import { escapeHtml, showToast } from './components.js';
 
-export async function initAgent(projectId) {
-  const panel = document.getElementById('tab-agent');
-  panel.innerHTML = `
-    <div class="card">
-      <h3>Drive Agent Session</h3>
-      <textarea id="promptInput" rows="4" placeholder="Prompt to send to the agent CLI for this project..."></textarea>
-      <div style="margin-top:8px;display:flex;gap:8px;">
-        <button class="primary" id="runBtn">Run</button>
-        <button class="ghost" id="killBtn" disabled>Kill</button>
-        <span id="sessionStatus" class="muted" style="align-self:center;"></span>
-      </div>
-    </div>
-    <div class="card">
-      <h3>Live Output</h3>
-      <div id="agent-log"></div>
-    </div>
-    <div class="card">
-      <h3>Recent Sessions</h3>
-      <div id="sessionHistory"></div>
-    </div>
-  `;
+const activeStatuses = new Set(['starting', 'running']);
 
-  const log = document.getElementById('agent-log');
-  const statusEl = document.getElementById('sessionStatus');
-  const killBtn = document.getElementById('killBtn');
+function runCard(run, timeline) {
+  const node = timeline?.nodes?.find((candidate) => candidate.id === run.nodeId);
+  return `<div class="rail-card run-card" data-run-id="${escapeHtml(run.id)}"><div class="run-heading"><span class="status-dot ${escapeHtml(run.status)}"></span><strong>${escapeHtml(node?.key || 'Run')} · ${escapeHtml(run.status)}</strong></div><p>${escapeHtml(node?.title || run.providerKind)}</p><div class="run-meta"><span>${escapeHtml(run.branch)}</span><span>${escapeHtml(run.providerKind)}</span></div><pre class="agent-stream" aria-label="Agent output">${escapeHtml(run.output || 'Waiting for provider output…')}</pre>${activeStatuses.has(run.status) ? `<button class="button danger cancel-run" data-cancel-run="${escapeHtml(run.id)}">Cancel run</button>` : ''}</div>`;
+}
 
-  connectWs(log, statusEl, killBtn);
-
-  document.getElementById('runBtn').addEventListener('click', async () => {
-    const promptText = document.getElementById('promptInput').value.trim();
-    if (!promptText) return;
-
-    log.textContent = '';
-    statusEl.textContent = 'starting...';
-    killBtn.disabled = false;
-
-    const res = await fetch(`/api/projects/${projectId}/agent/run`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ promptText })
+export async function renderActivityRail(container, { project, api }) {
+  if (!container || !project) return;
+  try {
+    const [runs, timeline] = await Promise.all([api.getRuns(project.id), api.getTimeline(project.id)]);
+    const active = runs.find((run) => activeStatuses.has(run.status));
+    const recent = active || runs[0];
+    container.innerHTML = recent ? `${runCard(recent, timeline)}<div class="rail-card"><strong>Safety boundary</strong><p>Working in ${escapeHtml(recent.worktreePath)}. ${escapeHtml(project.baseBranch)} remains protected.</p></div>` : `<div class="activity-empty">No agent run is active.</div><div class="rail-card"><strong>Safety boundary</strong><p>Runs branch from ${escapeHtml(project.baseBranch)} into an isolated worktree.</p></div>`;
+    container.querySelector('[data-cancel-run]')?.addEventListener('click', async (event) => {
+      try {
+        await api.cancelRun(event.currentTarget.dataset.cancelRun);
+        showToast('Run cancellation requested');
+        await renderActivityRail(container, { project, api });
+      } catch (error) {
+        showToast(error.message, 'error');
+      }
     });
-    const { sessionId } = await res.json();
-    currentSessionId = sessionId;
-    statusEl.textContent = `session #${sessionId} running`;
-
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'subscribe', sessionId }));
-    }
-    loadHistory(projectId);
-  });
-
-  killBtn.addEventListener('click', async () => {
-    if (!currentSessionId) return;
-    await fetch(`/api/agent/sessions/${currentSessionId}/kill`, { method: 'POST' });
-    statusEl.textContent = 'killed';
-    killBtn.disabled = true;
-  });
-
-  loadHistory(projectId);
+  } catch (error) {
+    container.innerHTML = `<div class="rail-card"><strong>Activity unavailable</strong><p>${escapeHtml(error.message)}</p></div>`;
+  }
 }
 
-function connectWs(log, statusEl, killBtn) {
-  if (ws && ws.readyState === WebSocket.OPEN) return;
-  const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(`${protocol}://${location.host}/ws`);
-
-  ws.addEventListener('message', (evt) => {
-    const msg = JSON.parse(evt.data);
-    if (msg.type === 'agent_output' && msg.sessionId === currentSessionId) {
-      log.textContent += msg.chunk;
-      log.scrollTop = log.scrollHeight;
-    }
-    if (msg.type === 'agent_closed' && msg.sessionId === currentSessionId) {
-      statusEl.textContent = `session #${msg.sessionId} ${msg.status}`;
-      killBtn.disabled = true;
-    }
-  });
-
-  ws.addEventListener('close', () => {
-    setTimeout(() => connectWs(log, statusEl, killBtn), 1500);
-  });
+export function appendLiveActivity(container, activity) {
+  if (activity.kind !== 'agent.output') return;
+  const card = container?.querySelector(`[data-run-id="${CSS.escape(activity.runId)}"]`);
+  const stream = card?.querySelector('.agent-stream');
+  if (!stream) return;
+  if (stream.textContent === 'Waiting for provider output…') stream.textContent = '';
+  stream.textContent += activity.chunk;
+  stream.scrollTop = stream.scrollHeight;
 }
 
-async function loadHistory(projectId) {
-  const sessions = await (await fetch(`/api/projects/${projectId}/agent/sessions`)).json();
-  const el = document.getElementById('sessionHistory');
-  if (!el) return;
-  el.innerHTML = sessions.length
-    ? sessions.map(s => `
-      <div class="list-row">
-        <span class="badge ${s.status}">${s.status}</span>
-        <span>${escapeHtml(s.prompt_text.slice(0, 80))}</span>
-        <span class="muted" style="margin-left:auto;">${s.started_at}</span>
-      </div>`).join('')
-    : `<div class="muted">No sessions yet.</div>`;
-}
-
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, s => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[s]));
+export async function initAgent(container, context) {
+  container.innerHTML = '<div class="panel agent-workspace"><div class="panel-header"><h2>Claude execution sessions</h2></div><div class="panel-body" id="agentSessionList"></div></div>';
+  const list = container.querySelector('#agentSessionList');
+  try {
+    const runs = await context.api.getRuns(context.project.id);
+    list.innerHTML = runs.length ? runs.map((run) => `<article class="session-row"><span class="status-dot ${escapeHtml(run.status)}"></span><div><strong>${escapeHtml(run.providerKind)}</strong><p>${escapeHtml(run.branch)}</p></div><span class="badge">${escapeHtml(run.status)}</span></article>`).join('') : '<p class="muted-copy">No provider sessions yet. Start a timeline step to create one.</p>';
+  } catch (error) {
+    list.innerHTML = `<p class="muted-copy">${escapeHtml(error.message)}</p>`;
+  }
 }
