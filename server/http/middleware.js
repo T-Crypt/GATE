@@ -37,6 +37,9 @@ export function notFoundHandler(req, _res, next) {
 
 export function errorHandler(error, req, res, _next) {
   let normalized = error;
+  if (error instanceof SyntaxError && error.status === 400 && 'body' in error) {
+    normalized = new AppError('INVALID_JSON', 'Request body is not valid JSON', { status: 400 });
+  }
   if (error instanceof ZodError) {
     normalized = new AppError('VALIDATION_FAILED', 'Request validation failed', {
       status: 422,
