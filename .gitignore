@@ -6,3 +6,6 @@ data/
 .env
 test-results/
 playwright-report/
+
+# Internal planning docs, not part of the shipped project
+docs/superpowers/
