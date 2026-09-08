@@ -9,7 +9,7 @@ test('base, stable, and production branches are always immutable', () => {
       () =>
         assertMutableBranch({
           actualBranch: branch,
-          assignedBranch: 'work/pmcp-run-7',
+          assignedBranch: 'work/gate-run-7',
           protectedBranches: ['main', 'stable', 'production']
         }),
       (error) => error.code === 'PROTECTED_BRANCH'
@@ -22,7 +22,7 @@ test('execution requires the exact branch assigned to its run', () => {
     () =>
       assertMutableBranch({
         actualBranch: 'other-work',
-        assignedBranch: 'work/pmcp-run-7',
+        assignedBranch: 'work/gate-run-7',
         protectedBranches: ['main']
       }),
     (error) => error.code === 'WORKTREE_BRANCH_MISMATCH'

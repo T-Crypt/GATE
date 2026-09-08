@@ -1,7 +1,7 @@
 {
-  "name": "project-mcp",
+  "name": "gate",
   "version": "0.2.0",
-  "description": "Local control plane for human-reviewed AI development",
+  "description": "Gated Agent Timeline Engine — a local control plane for human-reviewed AI development",
   "type": "module",
   "main": "server/index.js",
   "engines": {

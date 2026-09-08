@@ -10,6 +10,56 @@ function statusLabel(status) {
   return String(status || 'planned').replaceAll('_', ' ');
 }
 
+// Deterministic pick from the fixed .mc-0..mc-9 palette in style.css, so a
+// milestone always renders the same identity color across reloads without
+// persisting anything server-side. A page's CSP forbids inline styles, so the
+// palette lives in the stylesheet and this only ever returns a class name.
+const MILE_COLOR_COUNT = 10;
+function milestoneColorClass(key) {
+  let hash = 0;
+  for (const char of String(key)) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return `mc-${hash % MILE_COLOR_COUNT}`;
+}
+
+function ownerMilestoneId(node) {
+  return node.kind === 'milestone' ? node.id : node.parentId;
+}
+
+// For each milestone, finds incoming edges from nodes it does not own (i.e. steps
+// or milestones outside it) and reports whether any such source hasn't passed yet —
+// that's what "gates" this milestone from the rest of the plan.
+function computeMilestoneGating(milestones, allNodes, edges) {
+  const byId = new Map(allNodes.map((node) => [node.id, node]));
+  const result = new Map();
+  for (const milestone of milestones) {
+    const memberIds = new Set([
+      milestone.id,
+      ...allNodes.filter((node) => node.parentId === milestone.id).map((node) => node.id)
+    ]);
+    const incoming = edges.filter((edge) => memberIds.has(edge.toNodeId) && !memberIds.has(edge.fromNodeId));
+    const sources = incoming.map((edge) => byId.get(edge.fromNodeId)).filter(Boolean);
+    const blockers = sources.filter((node) => !passedStatuses.has(node.status));
+    const gatingKeys = [...new Set(blockers.map((node) => {
+      const owner = byId.get(ownerMilestoneId(node));
+      return owner ? owner.key : node.key;
+    }))];
+    result.set(milestone.id, { locked: blockers.length > 0, gatingKeys });
+  }
+  return result;
+}
+
+function renderMileRail(milestones, gating) {
+  if (milestones.length < 2) return '';
+  return `<div class="mile-rail" role="list" aria-label="Milestone gating overview">${milestones.map((milestone, index) => {
+    const info = gating.get(milestone.id) || { locked: false, gatingKeys: [] };
+    return `<button type="button" class="mile-marker ${milestoneColorClass(milestone.key)}" role="listitem" data-mile-target="${escapeHtml(milestone.id)}" data-locked="${info.locked}" title="${escapeHtml(milestone.title)}${info.locked ? ` — gated by ${escapeHtml(info.gatingKeys.join(', '))}` : ''}">
+      <span class="mile-dot">${escapeHtml(String(index + 1))}</span>
+      <span class="mile-key">${escapeHtml(milestone.key)}</span>
+      <small>${info.locked ? 'gated' : statusLabel(milestone.status)}</small>
+    </button>`;
+  }).join('')}</div>`;
+}
+
 function runnable(node, timeline) {
   if (!['planned', 'ready', 'blocked'].includes(node.status)) return false;
   const dependencies = timeline.edges
@@ -70,6 +120,7 @@ export async function initTimeline(container, { project, api, onRunChanged }) {
     const milestones = timeline.nodes.filter((node) => node.kind === 'milestone');
     const completed = timeline.nodes.filter((node) => node.kind === 'step' && node.status === 'complete').length;
     const steps = timeline.nodes.filter((node) => node.kind === 'step').length;
+    const gating = computeMilestoneGating(milestones, timeline.nodes, timeline.edges);
     container.innerHTML = `
       <section class="goal-panel panel">
         <div><p class="eyebrow">Claude planning</p><h2>Turn a goal into guided execution</h2><p>Claude proposes milestones, dependencies, and gates. Nothing runs until the draft is accepted.</p></div>
@@ -82,14 +133,26 @@ export async function initTimeline(container, { project, api, onRunChanged }) {
       </section>
       ${timeline.edges.length ? `<div class="dependency-strip" aria-label="Timeline dependencies">${timeline.edges.map((edge) => `<span class="dependency-chip"><span class="edge-glyph">↗</span>${escapeHtml(dependencyText(edge, timeline))}<small>${escapeHtml(gateLabel(edge.type.replace('_gate', '')))}</small></span>`).join('')}</div>` : ''}
       <section class="panel timeline-shell">
+        ${renderMileRail(milestones, gating)}
         <div class="timeline-ruler"><span>Plan</span><span>Build</span><span>Verify</span><span>Review</span></div>
-        ${milestones.length ? `<div class="timeline-scroll"><div class="timeline-canvas"><svg class="dependency-svg" aria-hidden="true"></svg>${milestones.map((milestone) => `<section class="milestone-lane"><header><span class="milestone-key">${escapeHtml(milestone.key)}</span><div><h2>${escapeHtml(milestone.title)}</h2><p>${escapeHtml(milestone.description || `${timeline.nodes.filter((node) => node.parentId === milestone.id).length} guided steps`)}</p></div><span class="badge">${escapeHtml(statusLabel(milestone.status))}</span></header><div class="milestone-steps">${timeline.nodes.filter((node) => node.parentId === milestone.id).map((step) => renderStep(step, timeline)).join('')}</div></section>`).join('')}</div></div>` : emptyState('TL', 'No timeline yet', 'Describe the outcome above. Claude can propose a dependency-aware plan for review.')}
+        ${milestones.length ? `<div class="timeline-scroll"><div class="timeline-canvas"><svg class="dependency-svg" aria-hidden="true"></svg>${milestones.map((milestone) => {
+          const info = gating.get(milestone.id) || { locked: false, gatingKeys: [] };
+          return `<section class="milestone-lane ${milestoneColorClass(milestone.key)}" data-node-id="${escapeHtml(milestone.id)}"><header><span class="milestone-key">${escapeHtml(milestone.key)}</span><div><h2>${escapeHtml(milestone.title)}</h2><p>${escapeHtml(milestone.description || `${timeline.nodes.filter((node) => node.parentId === milestone.id).length} guided steps`)}</p>${info.locked ? `<p class="mile-gated-tag">Gated by ${escapeHtml(info.gatingKeys.join(', '))}</p>` : ''}</div><span class="badge">${escapeHtml(statusLabel(milestone.status))}</span></header><div class="milestone-steps">${timeline.nodes.filter((node) => node.parentId === milestone.id).map((step) => renderStep(step, timeline)).join('')}</div></section>`;
+        }).join('')}</div></div>` : emptyState('TL', 'No timeline yet', 'Describe the outcome above. Claude can propose a dependency-aware plan for review.')}
       </section>`;
 
     const redraw = () => drawConnections(container, timeline);
     requestAnimationFrame(redraw);
     const observer = new ResizeObserver(redraw);
     observer.observe(container.querySelector('.timeline-shell'));
+
+    container.querySelectorAll('[data-mile-target]').forEach((marker) => marker.addEventListener('click', () => {
+      const lane = container.querySelector(`.milestone-lane[data-node-id="${CSS.escape(marker.dataset.mileTarget)}"]`);
+      if (!lane) return;
+      lane.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      lane.classList.add('flash');
+      setTimeout(() => lane.classList.remove('flash'), 900);
+    }));
 
     container.querySelector('#goalForm').addEventListener('submit', async (event) => {
       event.preventDefault();

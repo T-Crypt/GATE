@@ -17,7 +17,7 @@ export function loadConfig(env = process.env) {
     throw new Error('Non-loopback HOST requires ALLOW_REMOTE_BIND=true');
   }
 
-  const dataDir = path.resolve(env.PMCP_DATA_DIR || path.join(process.cwd(), 'data'));
+  const dataDir = path.resolve(env.GATE_DATA_DIR || path.join(process.cwd(), 'data'));
 
   return Object.freeze({
     host,
@@ -26,8 +26,8 @@ export function loadConfig(env = process.env) {
     databaseFile: path.join(dataDir, 'tracker.db'),
     validationDir: path.join(dataDir, 'tests'),
     worktreeDir: path.join(dataDir, 'worktrees'),
-    jsonLimit: env.PMCP_JSON_LIMIT || '1mb',
-    outputLimitBytes: integer(env.PMCP_OUTPUT_LIMIT_BYTES, 2_000_000, 'PMCP_OUTPUT_LIMIT_BYTES'),
+    jsonLimit: env.GATE_JSON_LIMIT || '1mb',
+    outputLimitBytes: integer(env.GATE_OUTPUT_LIMIT_BYTES, 2_000_000, 'GATE_OUTPUT_LIMIT_BYTES'),
     allowRemoteBind: env.ALLOW_REMOTE_BIND === 'true'
   });
 }

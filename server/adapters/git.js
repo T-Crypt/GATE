@@ -49,6 +49,13 @@ export class GitAdapter {
       if (error.code !== 'GIT_COMMAND_FAILED') throw error;
     }
     const status = await git(root, ['status', '--porcelain=v1', '--untracked-files=normal']);
+    // .gate/ is gate's own generated mirror (issues/timeline/notes snapshot). It's
+    // regenerated from the database on every mutation, so its presence shouldn't trip
+    // the "no uncommitted work" guard that keeps runs branching from a known-clean tree.
+    const relevantStatus = status
+      .split('\n')
+      .filter(Boolean)
+      .filter((line) => !line.slice(3).split(' -> ').pop().startsWith('.gate/'));
     const gitDir = path.resolve(root, await git(root, ['rev-parse', '--git-dir']));
     const commonDir = path.resolve(root, await git(root, ['rev-parse', '--git-common-dir']));
 
@@ -56,7 +63,7 @@ export class GitAdapter {
       root,
       branch,
       headSha,
-      dirty: Boolean(status),
+      dirty: relevantStatus.length > 0,
       gitDir,
       commonDir,
       isWorktree: gitDir !== commonDir
@@ -75,7 +82,7 @@ export class GitAdapter {
 
     await git(source.root, ['check-ref-format', '--branch', baseBranch]);
     const baseSha = await git(source.root, ['rev-parse', '--verify', `${baseBranch}^{commit}`]);
-    const branch = `work/pmcp-${safeRunId(runId)}`;
+    const branch = `work/gate-${safeRunId(runId)}`;
     await git(source.root, ['check-ref-format', '--branch', branch]);
     const parent = path.resolve(parentDir);
     fs.mkdirSync(parent, { recursive: true });

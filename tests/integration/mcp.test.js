@@ -15,11 +15,11 @@ async function setup() {
     .run('MCP fixture', '/tmp/mcp-fixture', '["main"]');
   const services = buildServices({
     db: database.db,
-    config: { worktreeDir: '/tmp/pmcp-mcp-worktrees', outputLimitBytes: 20_000 },
+    config: { worktreeDir: '/tmp/gate-mcp-worktrees', outputLimitBytes: 20_000 },
     providers: new Map([['claude', new FakeProvider()]])
   });
   const server = createMcpServer(services);
-  const client = new Client({ name: 'pmcp-test', version: '1.0.0' }, { capabilities: {} });
+  const client = new Client({ name: 'gate-test', version: '1.0.0' }, { capabilities: {} });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
   await client.connect(clientTransport);

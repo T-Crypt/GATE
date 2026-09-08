@@ -4,11 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 
 export function createGitFixture() {
-  const root = mkdtempSync(path.join(os.tmpdir(), 'pmcp-git-'));
+  const root = mkdtempSync(path.join(os.tmpdir(), 'gate-git-'));
   const repoPath = path.join(root, 'repo');
   const worktreeParent = path.join(root, 'worktrees');
   execFileSync('git', ['init', '-b', 'main', repoPath], { stdio: 'ignore' });
-  execFileSync('git', ['config', 'user.name', 'Project MCP Test'], { cwd: repoPath });
+  execFileSync('git', ['config', 'user.name', 'Gate Test'], { cwd: repoPath });
   execFileSync('git', ['config', 'user.email', 'test@localhost'], { cwd: repoPath });
   writeFileSync(path.join(repoPath, 'README.md'), '# fixture\n');
   execFileSync('git', ['add', 'README.md'], { cwd: repoPath });
