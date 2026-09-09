@@ -10,8 +10,12 @@ playwright-report/
 # Internal planning docs, not part of the shipped project
 docs/superpowers/
 
-# Local Claude Code settings and session artifacts (never shared/committed)
-.claude/
+# Local Claude Code settings and session artifacts (never shared/committed),
+# except .claude/skills/gate/ which is the SKILL.md Gate ships into other projects.
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/gate/
 .claude-plans/
 CLAUDE.local.md
 
