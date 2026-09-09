@@ -153,7 +153,8 @@ export class ExecutionService {
       baseBranch: project.baseBranch,
       protectedBranches: project.protectedBranches,
       runId,
-      parentDir: this.worktreeDir
+      parentDir: this.worktreeDir,
+      branchPrefix: project.branchPrefix
     });
     this.events.append(
       {

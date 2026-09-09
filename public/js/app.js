@@ -139,12 +139,41 @@ async function refreshActivity() {
 }
 
 function openOnboarding() {
-  const label = getState().projects.length ? 'Connect a project' : 'Connect your first project';
+  const hasProjects = getState().projects.length;
+  const label = hasProjects ? 'Connect a project' : 'Connect your first project';
   openDialog({
     label,
-    content: `<div class="dialog-header"><p class="eyebrow">Local Git workspace</p><h2>${escapeHtml(label)}</h2><p>Gate stores coordination data locally and never works directly on protected branches.</p></div><form class="dialog-body form-grid" id="projectForm"><div class="field"><label for="projectName">Project name</label><input id="projectName" name="name" autocomplete="off" required maxlength="120" placeholder="Aphotic workstation" /></div><div class="field"><label for="repoPath">Repository path</label><input id="repoPath" name="repoPath" autocomplete="off" required placeholder="/home/you/project" /><span class="field-hint">Absolute path to an existing local Git repository.</span></div><div class="form-split"><div class="field"><label for="baseBranch">Base branch</label><input id="baseBranch" name="baseBranch" value="main" required /></div><div class="field"><label for="stableBranch">Stable branch</label><input id="stableBranch" name="stableBranch" placeholder="stable" /></div></div><div class="field"><label for="productionBranch">Production branch</label><input id="productionBranch" name="productionBranch" placeholder="production" /></div><p class="form-error" id="projectError" role="alert"></p><div class="button-row"><button class="button primary" type="submit">Connect project</button></div></form>`,
+    content: `<div class="dialog-header"><p class="eyebrow">Local Git workspace</p><h2>${escapeHtml(label)}</h2><p>Gate detects your repository's default branch as the only protected branch and opens isolated worktrees for every automatic run.</p></div><form class="dialog-body form-grid" id="projectForm"><div class="field"><label for="projectName">Project name</label><input id="projectName" name="name" autocomplete="off" required maxlength="120" placeholder="Aphotic workstation" /></div><div class="field"><label for="repoPath">Repository path</label><input id="repoPath" name="repoPath" autocomplete="off" required placeholder="/home/you/project" /><span class="field-hint">Absolute path to an existing local Git repository. The default branch is detected automatically.</span></div><div class="field" id="baseBranchField" hidden><label for="baseBranch">Default branch</label><input id="baseBranch" name="baseBranch" value="main" readonly /></div><div class="field" id="baseBranchDetect"><span class="field-hint" id="baseBranchDetectText">Enter a repository path to detect its default branch.</span></div><div class="field"><label for="branchPrefix">Branch naming prefix</label><input id="branchPrefix" name="branchPrefix" value="work/gate-" maxlength="250" /><span class="field-hint">Every run opens an isolated branch with this prefix, e.g. <code>work/gate-&lt;run&gt;</code>.</span></div><p class="form-error" id="projectError" role="alert"></p><div class="button-row"><button class="button primary" type="submit">Connect project</button></div></form>`,
     onMount(dialog) {
       const form = dialog.querySelector('#projectForm');
+      const repoPathInput = dialog.querySelector('#repoPath');
+      const baseField = dialog.querySelector('#baseBranchField');
+      const baseDetect = dialog.querySelector('#baseBranchDetect');
+      const baseDetectText = dialog.querySelector('#baseBranchDetectText');
+      const baseInput = dialog.querySelector('#baseBranch');
+      let detectTimer = null;
+      repoPathInput.addEventListener('input', () => {
+        clearTimeout(detectTimer);
+        detectTimer = setTimeout(async () => {
+          const pathValue = repoPathInput.value.trim();
+          if (!pathValue) {
+            baseField.hidden = true;
+            baseDetect.hidden = false;
+            baseDetectText.textContent = 'Enter a repository path to detect its default branch.';
+            return;
+          }
+          try {
+            const result = await api.inspectRepo({ repoPath: pathValue });
+            baseInput.value = result.defaultBranch || 'main';
+            baseField.hidden = false;
+            baseDetect.hidden = true;
+          } catch {
+            baseField.hidden = true;
+            baseDetect.hidden = false;
+            baseDetectText.textContent = 'Could not detect a default branch for that path.';
+          }
+        }, 400);
+      });
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
         const values = Object.fromEntries(new FormData(form));

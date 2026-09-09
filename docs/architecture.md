@@ -11,3 +11,7 @@ Execution flows from accepted timeline node to safety preflight, isolated worktr
 `project_digests` holds one row per project: a depth-capped file tree and the current milestone titles, refreshed whenever the project's Git history is synced. `timeline_draft` sends this instead of raw repository content, so drafting a new milestone starts the provider with cheap orientation rather than an unscoped exploration or a full-codebase paste.
 
 The Activity view and the `activity_feed` MCP tool both read the same query — `runs` joined to the timeline node that started them, plus the `activity` table — so "what has this project's agent actually run" has one answer whether it's asked from the browser or from an MCP client.
+
+## Remote observation
+
+`RemoteService` caches a project's open pull requests and repository issues from the GitHub API (`remote_prs`, `remote_issues`). `remote.sync` is a single idempotent command that refetches both. The `GithubRemoteAdapter` is read-only: no create, merge, or push path exists, and without `GATE_GITHUB_TOKEN` the remote routes report `configured: false` and sync is rejected with `REMOTE_NOT_CONFIGURED`. Run branches take their prefix from the project's `branch_prefix` (default `work/gate-`).

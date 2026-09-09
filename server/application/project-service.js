@@ -20,6 +20,15 @@ function optionalBranch(value, field) {
   return branch;
 }
 
+function branchPrefix(value) {
+  const prefix = String(value ?? 'work/gate-').trim();
+  if (!prefix) return 'work/gate-';
+  if (/\s|\.\.|[~^:?*\[\\]/.test(prefix) || prefix.startsWith('-')) {
+    throw validation('branchPrefix is not a valid branch naming prefix', { field: 'branchPrefix' });
+  }
+  return prefix;
+}
+
 function normalizePolicy(input, current = {}) {
   const baseBranch = optionalBranch(input.baseBranch ?? current.baseBranch ?? 'main', 'baseBranch');
   const productionBranch = optionalBranch(
@@ -55,6 +64,7 @@ function decodeProject(row) {
     productionBranch: row.production_branch,
     stableBranch: row.stable_branch,
     protectedBranches: JSON.parse(row.protected_branches_json),
+    branchPrefix: row.branch_prefix || 'work/gate-',
     interactionLevel: row.interaction_level,
     providerKind: row.provider_kind,
     providerConfig: JSON.parse(row.provider_config_json),
@@ -80,9 +90,17 @@ function canonicalRepository(repoPath) {
 }
 
 export class ProjectService {
-  constructor(db, eventStore) {
+  constructor(db, eventStore, gitAdapter) {
     this.db = db;
     this.events = eventStore;
+    this.git = gitAdapter;
+  }
+
+  async inspect(input) {
+    const repoPath = canonicalRepository(input.repoPath);
+    const origin = await this.git.remoteOrigin(repoPath);
+    const defaultBranch = await this.git.defaultBranch(repoPath);
+    return { repoPath, defaultBranch, origin: origin || null };
   }
 
   create(input, context) {
@@ -90,13 +108,14 @@ export class ProjectService {
       const name = text(input.name, 'name');
       const repoPath = canonicalRepository(input.repoPath);
       const policy = normalizePolicy(input);
+      const prefix = branchPrefix(input.branchPrefix);
       const row = this.db
         .prepare(
           `INSERT INTO projects(
              name, repo_path, base_branch, production_branch, stable_branch,
-             protected_branches_json, interaction_level, provider_kind, provider_config_json,
+             protected_branches_json, branch_prefix, interaction_level, provider_kind, provider_config_json,
              updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
         )
         .run(
           name,
@@ -105,6 +124,7 @@ export class ProjectService {
           policy.productionBranch,
           policy.stableBranch,
           JSON.stringify(policy.protectedBranches),
+          prefix,
           input.interactionLevel || 'assist',
           input.providerKind || 'claude',
           JSON.stringify(input.providerConfig || {})
@@ -115,7 +135,7 @@ export class ProjectService {
         type: 'project.created',
         actor: context.actor,
         correlationId: context.correlationId,
-        payload: { name, repoPath, ...policy }
+        payload: { name, repoPath, ...policy, branchPrefix: prefix }
       });
       return this.get(projectId);
     });
@@ -135,6 +155,7 @@ export class ProjectService {
       () => {
         const current = this.get(projectId);
         const policy = normalizePolicy(input, current);
+        const prefix = branchPrefix(input.branchPrefix ?? current.branchPrefix);
         const interactionLevel = input.interactionLevel ?? current.interactionLevel;
         if (!['observe', 'assist', 'automatic', 'custom'].includes(interactionLevel)) {
           throw validation('Unknown interaction level', { field: 'interactionLevel' });
@@ -146,14 +167,14 @@ export class ProjectService {
             type: 'project.policy.updated',
             actor: context.actor,
             correlationId: context.correlationId,
-            payload: { ...policy, interactionLevel }
+            payload: { ...policy, branchPrefix: prefix, interactionLevel }
           },
           () => {
             this.db
               .prepare(
                 `UPDATE projects SET
                    base_branch = ?, production_branch = ?, stable_branch = ?,
-                   protected_branches_json = ?, interaction_level = ?, updated_at = datetime('now')
+                   protected_branches_json = ?, branch_prefix = ?, interaction_level = ?, updated_at = datetime('now')
                  WHERE id = ?`
               )
               .run(
@@ -161,6 +182,7 @@ export class ProjectService {
                 policy.productionBranch,
                 policy.stableBranch,
                 JSON.stringify(policy.protectedBranches),
+                prefix,
                 interactionLevel,
                 projectId
               );

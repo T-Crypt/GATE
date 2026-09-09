@@ -12,6 +12,7 @@ import {
   requestContext
 } from './http/middleware.js';
 import { projectsRouter } from './http/projects.js';
+import { remoteRouter } from './http/remote.js';
 import { reviewsRouter } from './http/reviews.js';
 import { timelineRouter } from './http/timeline.js';
 
@@ -61,6 +62,9 @@ export function createApp({ services, config, logger, routes = true }) {
     app.use('/api/v1', executionsRouter(services.execution));
     app.use('/api/v1', reviewsRouter(services.reviews));
     app.use('/api/v1', dashboardRouter(services.dashboard));
+    if (services.remote) {
+      app.use('/api/v1', remoteRouter(services.remote));
+    }
   }
 
   app.use(express.static(publicDir, { index: 'index.html', maxAge: '1h' }));

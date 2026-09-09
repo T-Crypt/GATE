@@ -97,3 +97,60 @@ test('a hand-edited .gitignore with unrelated changes still counts as dirty', as
     fixture.close();
   }
 });
+
+test('createRunWorktree honors a custom branch prefix', async () => {
+  const fixture = createGitFixture();
+  const git = new GitAdapter();
+
+  try {
+    const worktree = await git.createRunWorktree({
+      repoPath: fixture.repoPath,
+      baseBranch: 'main',
+      protectedBranches: ['main'],
+      runId: 'run-77',
+      parentDir: fixture.worktreeParent,
+      branchPrefix: 'feat/gate-'
+    });
+
+    assert.equal(worktree.branch, 'feat/gate-run-77');
+    assert.equal((await git.inspect(worktree.path)).branch, 'feat/gate-run-77');
+  } finally {
+    fixture.close();
+  }
+});
+
+test('defaultBranch reports the initial branch when no origin HEAD is set', async () => {
+  const fixture = createGitFixture();
+  const git = new GitAdapter();
+
+  try {
+    assert.equal(await git.defaultBranch(fixture.repoPath), 'main');
+  } finally {
+    fixture.close();
+  }
+});
+
+test('branches lists local branches', async () => {
+  const fixture = createGitFixture();
+  const git = new GitAdapter();
+
+  try {
+    const branches = await git.branches(fixture.repoPath);
+    assert.ok(branches.includes('main'));
+    assert.ok(branches.includes('stable'));
+    assert.ok(branches.includes('production'));
+  } finally {
+    fixture.close();
+  }
+});
+
+test('remoteOrigin returns null when repository has no origin', async () => {
+  const fixture = createGitFixture();
+  const git = new GitAdapter();
+
+  try {
+    assert.equal(await git.remoteOrigin(fixture.repoPath), null);
+  } finally {
+    fixture.close();
+  }
+});

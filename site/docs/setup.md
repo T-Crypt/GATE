@@ -45,13 +45,15 @@ All configuration is via environment variables (see `.env.example`):
 | `GATE_OUTPUT_LIMIT_BYTES` | `2000000` | Cap on captured provider output. |
 | `LOG_LEVEL` | `info` | Log verbosity. |
 | `ALLOW_REMOTE_BIND` | `false` | Permit binding to a non-loopback host. |
+| `GATE_GITHUB_TOKEN` | *(unset)* | GitHub token enabling the read-only remote overview (open PRs and issues) in the Git view. Gate only reads; it never creates, merges, or pushes. |
+| `GATE_GITHUB_API_URL` | `https://api.github.com` | GitHub REST API base URL; override for GitHub Enterprise. |
 
 ## Data layout
 
 Under `GATE_DATA_DIR` (default `data/`):
 
 - `tracker.db` — the SQLite database; the source of truth.
-- `worktrees/` — linked worktrees, one per run, on branches named `work/gate-<run-id>`.
+- `worktrees/` — linked worktrees, one per run, on branches named `<project-prefix><run-id>` (`work/gate-<run-id>` by default; the prefix is set per project at connect time or from Settings).
 - `tests/<project-id>/` — validation artifacts; always local.
 
 ## Backups

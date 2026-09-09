@@ -17,9 +17,13 @@ The domain owns DAG, gate, and branch rules. Adapters own Git, provider processe
 Execution flows from accepted timeline node to safety preflight, isolated worktree, provider stream, commit-bound evidence, and human decision. There is intentionally no merge or push path.
 
 - Safety preflight refuses to start a run if the base checkout has uncommitted changes (`DIRTY_BASE_WORKTREE`) and never executes on protected branches.
-- Each run gets its own linked worktree on branch `work/gate-<run-id>`, created from the base branch without checking it out or modifying it.
+- Each run gets its own linked worktree on a branch named `<project-prefix><run-id>` — `work/gate-<run-id>` by default — created from the base branch without checking it out or modifying it.
 - Evidence submitted against a gate is bound to a commit SHA and file scope; when the branch moves or an in-scope file changes, the evidence goes stale (`STALE_EVIDENCE`).
 - Approval gates require a human actor; an agent that tries to approve its own work is rejected.
+
+## Remote observation (read-only)
+
+When `GATE_GITHUB_TOKEN` is set, `RemoteService` (`server/application/remote-service.js`) observes the repository over the GitHub REST API and caches open pull requests and issues in `remote_prs` / `remote_issues`. The `GithubRemoteAdapter` (`server/adapters/remote/github.js`) only ever reads; `remote.sync` is a single idempotent command that refetches both and rewrites the cache. There is no create, merge, or push path — remote data is context, not control. Without a token, the remote routes report `configured: false` and sync is rejected with `REMOTE_NOT_CONFIGURED`.
 
 ## Repository mirror (`.gate/`)
 
