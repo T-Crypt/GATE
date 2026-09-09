@@ -99,7 +99,7 @@ The existing timeline remains unchanged until that revision is accepted. Locked,
 
 HTTP adds project-scoped feature CRUD, feature planning, planning-request read/accept, issue planning, and milestone expansion routes. Input validation uses the existing Zod/error-envelope conventions, and every mutation requires an idempotency key.
 
-MCP exposes compact equivalents for listing/reading/creating/updating/planning features, planning an issue, reading a planning request, accepting its timeline draft, and expanding a milestone. No MCP approval tool is added. No tool can merge, push, delete protected work, or mutate GitHub.
+MCP exposes compact equivalents for listing/reading/creating/updating/planning features, planning an issue, reading a planning request, and expanding a milestone. Plan acceptance remains available only through the localhost human-facing HTTP/WebUI boundary. No MCP approval tool is added. No tool can merge, push, delete protected work, or mutate GitHub.
 
 ## WebUI
 

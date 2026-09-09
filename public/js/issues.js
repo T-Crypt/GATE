@@ -1,4 +1,5 @@
 import { emptyState, escapeHtml, showToast } from './components.js';
+import { bindPlanningReview, planningReview } from './features.js';
 
 const COLUMNS = [
   ['open', 'Open'],
@@ -15,6 +16,7 @@ function issueCard(issue) {
         <select id="issue-${issue.id}" class="compact-select issue-status" data-id="${issue.id}">
           ${COLUMNS.map(([value, label]) => `<option value="${value}" ${issue.status === value ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
         </select>
+        <button class="button issue-plan" data-plan-issue="${issue.id}">Plan issue</button>
       </div>
     </div>`;
 }
@@ -50,6 +52,7 @@ export async function initIssues(container, { project, api }) {
           ${issues.length ? board(issues) : emptyState('IS', 'No open issues', 'Capture decisions and small follow-up work without leaving the workstation.')}
         </div>
       </article>
+      <div id="issuePlanReview"></div>
       <article class="panel notes-panel" id="notesPanel">
         <div class="panel-header"><div><p class="eyebrow">Project memory</p><h2>Notes</h2></div></div>
         <div class="panel-body">
@@ -76,6 +79,16 @@ export async function initIssues(container, { project, api }) {
       await api.updateIssue(project.id, select.dataset.id, { status: select.value });
       showToast('Issue status updated');
       await initIssues(container, { project, api });
+    }));
+    container.querySelectorAll('[data-plan-issue]').forEach((button) => button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const plan = await api.planIssue(project.id, button.dataset.planIssue);
+        const target = container.querySelector('#issuePlanReview');
+        target.innerHTML = planningReview(plan);
+        bindPlanningReview(target, { project, api, onAccepted: () => initIssues(container, { project, api }) });
+        showToast('Issue plan proposed');
+      } catch (error) { showToast(error.message, 'error'); button.disabled = false; }
     }));
     container.querySelector('#noteForm')?.addEventListener('submit', async (event) => {
       event.preventDefault();

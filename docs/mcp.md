@@ -92,6 +92,16 @@ Every mutating tool requires an `idempotencyKey`; retrying the same key returns 
 
 `memory_refresh` and `memory_context` are mutations and require `idempotencyKey`. Memory tools operate only on the connected local repository. Context compilation does not send source or instruction content to a provider.
 
+**Feature planning**
+- `feature_list`, `feature_get` — inspect durable feature workspaces.
+- `feature_create`, `feature_update` — create and advance a local feature lifecycle.
+- `feature_plan` — compile current Memory context and propose a feature timeline.
+- `issue_plan` — convert a local issue into the same grounded planning flow.
+- `milestone_expand` — propose additional child steps without altering the accepted timeline.
+- `planning_get` — inspect impact, context provenance, and the proposed draft.
+
+Feature planning mutations require `idempotencyKey`. MCP cannot accept a Phase 5 proposal; acceptance remains in the localhost human-facing interface.
+
 There is no MCP approval tool. This is intentional: an agent can report evidence but cannot impersonate the human review gate. There are also no merge, push, or protected-branch mutation tools — those don't exist anywhere in Gate, over MCP or otherwise.
 
 ## Multi-provider note

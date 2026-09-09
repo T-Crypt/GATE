@@ -6,7 +6,7 @@ import path from 'node:path';
 // commands — the files are just tracked/committed/pushed through the user's own
 // workflow, same as any other file in the tree (see AGENTS.md: no integration
 // command, no automation of push/merge).
-const RELEVANT_PREFIXES = ['project.', 'timeline.', 'issue.', 'note.'];
+const RELEVANT_PREFIXES = ['project.', 'timeline.', 'issue.', 'note.', 'feature.', 'planning.', 'milestone.'];
 
 // .gate/ holds this machine's view of a project (timeline, issues, notes). It
 // stays out of the project's own commits by default, so cloning someone's repo
@@ -61,6 +61,10 @@ export class RepoMirrorService {
     const gates = this.db.prepare('SELECT * FROM gates WHERE project_id = ? ORDER BY id').all(projectId);
     const issues = this.db.prepare('SELECT * FROM issues WHERE project_id = ? ORDER BY id').all(projectId);
     const notes = this.db.prepare('SELECT * FROM notes WHERE project_id = ? ORDER BY id').all(projectId);
+    const features = this.db.prepare('SELECT * FROM features WHERE project_id = ? ORDER BY created_at, id').all(projectId).map((feature) => ({
+      ...feature,
+      planningRequests: this.db.prepare("SELECT id, status, timeline_draft_id, created_at, accepted_at FROM planning_requests WHERE project_id = ? AND source_type = 'feature' AND source_id = ? ORDER BY created_at").all(projectId, feature.id)
+    }));
     const milestones = nodes.filter((node) => node.kind === 'milestone');
     const steps = nodes.filter((node) => node.kind === 'step');
 
@@ -74,6 +78,7 @@ export class RepoMirrorService {
     this.#writeJson(path.join(dir, 'timeline.json'), { generatedAt: new Date().toISOString(), nodes, edges, gates });
     this.#writeJson(path.join(dir, 'issues.json'), issues);
     this.#writeJson(path.join(dir, 'notes.json'), notes);
+    this.#writeJson(path.join(dir, 'features.json'), features);
     this.#writeText(path.join(dir, 'MILESTONES.md'), this.#renderMilestones(milestones, steps, edges, gates));
     this.#writeText(path.join(dir, 'ISSUES.md'), this.#renderIssues(issues, notes));
   }

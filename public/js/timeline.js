@@ -1,4 +1,5 @@
 import { emptyState, escapeHtml, providerModelDefault, providerName, showToast } from './components.js';
+import { bindPlanningReview, planningReview } from './features.js';
 
 const passedStatuses = new Set(['complete', 'approved']);
 
@@ -166,7 +167,7 @@ export async function initTimeline(container, { project, api, onRunChanged }) {
           const info = gating.get(milestone.id) || { locked: false, gatingKeys: [] };
           const steps = timeline.nodes.filter((node) => node.parentId === milestone.id);
           const aggregate = aggregateMilestoneStatus(steps);
-          return `<section class="milestone-lane ${milestoneColorClass(milestone.key)}" data-node-id="${escapeHtml(milestone.id)}"><header><span class="milestone-key">${escapeHtml(milestone.key)}</span><div><h2>${escapeHtml(milestone.title)}</h2><p>${escapeHtml(milestone.description || `${steps.length} guided steps`)}</p>${info.locked ? `<p class="mile-gated-tag">Gated by ${escapeHtml(info.gatingKeys.join(', '))}</p>` : ''}</div><span class="badge"><span class="status-dot ${escapeHtml(aggregate.tone)}"></span>${escapeHtml(aggregate.label)}</span></header><div class="milestone-steps">${steps.map((step) => renderStep(step, timeline)).join('')}</div></section>`;
+          return `<section class="milestone-lane ${milestoneColorClass(milestone.key)}" data-node-id="${escapeHtml(milestone.id)}"><header><span class="milestone-key">${escapeHtml(milestone.key)}</span><div><h2>${escapeHtml(milestone.title)}</h2><p>${escapeHtml(milestone.description || `${steps.length} guided steps`)}</p>${info.locked ? `<p class="mile-gated-tag">Gated by ${escapeHtml(info.gatingKeys.join(', '))}</p>` : ''}</div><div class="milestone-actions"><span class="badge"><span class="status-dot ${escapeHtml(aggregate.tone)}"></span>${escapeHtml(aggregate.label)}</span><button class="button" data-expand-milestone="${escapeHtml(milestone.id)}">Expand</button></div></header><div class="milestone-expansion"></div><div class="milestone-steps">${steps.map((step) => renderStep(step, timeline)).join('')}</div></section>`;
         }).join('')}</div></div>` : emptyState('TL', 'No timeline yet', `Describe the outcome above. ${providerName(project.providerKind)} can propose a dependency-aware plan for review.`)}
       </section>`;
 
@@ -217,6 +218,16 @@ export async function initTimeline(container, { project, api, onRunChanged }) {
         showToast(error.message, 'error');
         button.disabled = false;
       }
+    }));
+    container.querySelectorAll('[data-expand-milestone]').forEach((button) => button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const plan = await api.expandMilestone(project.id, button.dataset.expandMilestone);
+        const target = button.closest('.milestone-lane').querySelector('.milestone-expansion');
+        target.innerHTML = planningReview(plan);
+        bindPlanningReview(target, { project, api, onAccepted: () => initTimeline(container, { project, api, onRunChanged }) });
+        showToast('Milestone expansion proposed');
+      } catch (error) { showToast(error.message, 'error'); button.disabled = false; }
     }));
     container.querySelector('#scheduleNext')?.addEventListener('click', async () => {
       try {

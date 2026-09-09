@@ -26,6 +26,8 @@ The name is literal. The core domain object is the gate: a checkpoint a step mus
 
 **Builds local project intelligence.** GATE Memory incrementally indexes repository files, JavaScript-family symbols, imports, references, and searchable source text into SQLite. Its Memory view supports hybrid search, focused graph traversal, and deterministic impact analysis. The Context Compiler turns those results and project instructions into token-budgeted planning or execution capsules with commit- and node-level provenance; stale indexes are rejected rather than silently used.
 
+**Keeps feature work grounded.** Durable Feature workspaces connect intent, structural impact, compiled context, and proposed timeline revisions. Local issues use the same planning path, while accepted milestones can be expanded progressively. Every generated plan stays proposed until it is accepted from the localhost interface.
+
 **Speaks MCP too.** The same application services run over stdio for any MCP client. Read tools cover projects, timelines, runs, reviews, activity, and GATE Memory; idempotent mutations can refresh Memory, compile context, draft or accept timelines, run steps, submit evidence, and maintain local issues and notes. There is deliberately no approval tool and no merge, push, or protected-branch mutation tool over MCP: an agent can report evidence, but it cannot approve its own gate.
 
 ## Safety contract
