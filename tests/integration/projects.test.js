@@ -241,3 +241,48 @@ test('policy update persists a custom branch prefix', () => {
     repository.close();
   }
 });
+
+test('projects default to active stage and stage updates are event-backed and idempotent', () => {
+  const repository = createRepository();
+  const { db, close } = createTestDatabase();
+  const events = new EventStore(db);
+  const projects = new ProjectService(db, events);
+
+  try {
+    const project = projects.create(
+      { name: 'Workbench', repoPath: repository.repoPath },
+      context('create-stage')
+    );
+    assert.equal(project.stage, 'active');
+
+    const first = projects.updateStage(project.id, { stage: 'maintenance' }, context('stage-update'));
+    const repeated = projects.updateStage(project.id, { stage: 'maintenance' }, context('stage-update'));
+
+    assert.equal(first.stage, 'maintenance');
+    assert.deepEqual(repeated, first);
+    assert.equal(events.readAfter(project.id, 0, 20).at(-1).type, 'project.stage.updated');
+  } finally {
+    close();
+    repository.close();
+  }
+});
+
+test('projects reject unknown lifecycle stages', () => {
+  const repository = createRepository();
+  const { db, close } = createTestDatabase();
+  const projects = new ProjectService(db, new EventStore(db));
+
+  try {
+    const project = projects.create(
+      { name: 'Workbench', repoPath: repository.repoPath },
+      context('create-invalid-stage')
+    );
+    assert.throws(
+      () => projects.updateStage(project.id, { stage: 'in-flight' }, context('invalid-stage')),
+      (error) => error.code === 'VALIDATION_FAILED'
+    );
+  } finally {
+    close();
+    repository.close();
+  }
+});

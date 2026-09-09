@@ -82,6 +82,16 @@ Every mutating tool requires an `idempotencyKey`; retrying the same key returns 
 - `issue_update` — change an issue's status (`open`, `in_progress`, `closed`).
 - `note_create` — record a local note, optionally tagged.
 
+**GATE Memory**
+- `memory_status` — compare the indexed revision with the current repository SHA and read graph/search counts.
+- `memory_search` — combine exact structural matches with local FTS5 source retrieval and explain each match.
+- `memory_neighbors` — traverse a bounded neighborhood through selected `CONTAINS`, `IMPORTS`, and `REFERENCES` edges.
+- `memory_impact` — return matching symbols/files, declaring files, transitive production dependents, tests, risk, and structural reasons.
+- `memory_refresh` — idempotently build or incrementally refresh the local index.
+- `memory_context` — idempotently compile and persist a token-budgeted context capsule. It requires current Memory, injects project instructions, and returns full commit, graph, file, and retrieval provenance.
+
+`memory_refresh` and `memory_context` are mutations and require `idempotencyKey`. Memory tools operate only on the connected local repository. Context compilation does not send source or instruction content to a provider.
+
 There is no MCP approval tool. This is intentional: an agent can report evidence but cannot impersonate the human review gate. There are also no merge, push, or protected-branch mutation tools — those don't exist anywhere in Gate, over MCP or otherwise.
 
 ## Multi-provider note

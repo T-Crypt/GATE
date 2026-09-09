@@ -129,6 +129,26 @@ test('settings always retains the base branch as protected', async ({ page, requ
   await expect(page.getByLabel('main protected')).toBeDisabled();
 });
 
+test('project settings persist lifecycle stage and expose managed instructions', async ({ page, request }) => {
+  const project = await ensureProject(request);
+  await request.patch(`/api/v1/projects/${project.id}/stage`, {
+    headers: { 'Idempotency-Key': 'browser-stage-active' },
+    data: { stage: 'active' }
+  });
+
+  await page.goto('/#/settings');
+  await page.getByLabel('Active project').selectOption(String(project.id));
+  await page.getByLabel('Project stage').selectOption('maintenance');
+  await page.getByRole('button', { name: 'Save project stage' }).click();
+  await expect(page.getByLabel('Project stage')).toHaveValue('maintenance');
+
+  await expect(page.getByRole('heading', { name: 'Project instructions' })).toBeVisible();
+  await page.getByLabel('Instruction file').selectOption('CLAUDE.md');
+  await page.getByLabel('User project instructions').fill('# Delivery rules\n\nRun targeted tests.');
+  await page.getByRole('button', { name: 'Save instructions' }).click();
+  await expect(page.getByText('Managed GATE contract')).toBeVisible();
+});
+
 test('can switch the provider backend from settings', async ({ page, request }) => {
   const project = await ensureProject(request);
   await page.goto('/#/settings');

@@ -24,7 +24,9 @@ The name is literal. The core domain object is the gate: a checkpoint a step mus
 
 **Keeps a copy in your repo.** Gate mirrors each project's timeline, issues, and notes into `<repo>/.gate/` as plain JSON and Markdown, refreshed on every change. The mirror is ignored by default — Gate appends a `.gate/` entry to the repository's `.gitignore` when it first connects. Remove that entry if you want this data to travel with the repo instead of living only in Gate's local database.
 
-**Speaks MCP too.** The same application services run over stdio for any MCP client. Read tools list projects, timelines, runs, review bundles, and the recent activity feed. Mutation tools require an idempotency key and can draft or accept timelines, start, schedule, or cancel steps, submit evidence, create or update issues, and add notes. There is deliberately no approval tool and no merge, push, or protected-branch mutation tool over MCP: an agent can report evidence, but it cannot approve its own gate.
+**Builds local project intelligence.** GATE Memory incrementally indexes repository files, JavaScript-family symbols, imports, references, and searchable source text into SQLite. Its Memory view supports hybrid search, focused graph traversal, and deterministic impact analysis. The Context Compiler turns those results and project instructions into token-budgeted planning or execution capsules with commit- and node-level provenance; stale indexes are rejected rather than silently used.
+
+**Speaks MCP too.** The same application services run over stdio for any MCP client. Read tools cover projects, timelines, runs, reviews, activity, and GATE Memory; idempotent mutations can refresh Memory, compile context, draft or accept timelines, run steps, submit evidence, and maintain local issues and notes. There is deliberately no approval tool and no merge, push, or protected-branch mutation tool over MCP: an agent can report evidence, but it cannot approve its own gate.
 
 ## Safety contract
 

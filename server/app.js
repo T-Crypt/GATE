@@ -12,6 +12,7 @@ import {
   requestContext
 } from './http/middleware.js';
 import { projectsRouter } from './http/projects.js';
+import { memoryRouter } from './http/memory.js';
 import { remoteRouter } from './http/remote.js';
 import { reviewsRouter } from './http/reviews.js';
 import { timelineRouter } from './http/timeline.js';
@@ -57,7 +58,8 @@ export function createApp({ services, config, logger, routes = true }) {
   });
 
   if (routes) {
-    app.use('/api/v1', projectsRouter(services.projects));
+    app.use('/api/v1', projectsRouter(services.projects, services.instructions));
+    if (services.memory) app.use('/api/v1', memoryRouter(services.memory, services.contexts));
     app.use('/api/v1', timelineRouter(services.timeline, services.execution));
     app.use('/api/v1', executionsRouter(services.execution));
     app.use('/api/v1', reviewsRouter(services.reviews));

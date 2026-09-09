@@ -38,6 +38,23 @@ export const api = {
   inspectRepo: (input) => request('/projects/inspect', { method: 'POST', body: input }),
   updatePolicy: (projectId, input) => request(`/projects/${projectId}/policy`, { method: 'PATCH', body: input }),
   updateProvider: (projectId, input) => request(`/projects/${projectId}/provider`, { method: 'PATCH', body: input }),
+  updateStage: (projectId, input) => request(`/projects/${projectId}/stage`, { method: 'PATCH', body: input }),
+  listInstructions: (projectId) => request(`/projects/${projectId}/instructions`),
+  getInstruction: (projectId, fileName) => request(`/projects/${projectId}/instructions/${encodeURIComponent(fileName)}`),
+  updateInstruction: (projectId, fileName, input) => request(`/projects/${projectId}/instructions/${encodeURIComponent(fileName)}`, { method: 'PUT', body: input }),
+  getMemoryStatus: (projectId) => request(`/projects/${projectId}/memory/status`),
+  refreshMemory: (projectId, input = {}) => request(`/projects/${projectId}/memory/refresh`, { method: 'POST', body: input }),
+  searchMemory: (projectId, query, input = {}) => request(`/projects/${projectId}/memory/search?${new URLSearchParams({ q: query, ...input })}`),
+  getMemoryNeighbors: (projectId, nodeId, input = {}) => {
+    const options = typeof input === 'number' ? { depth: input } : input;
+    const query = new URLSearchParams({ depth: options.depth || 1 });
+    if (options.edgeTypes?.length) query.set('edgeTypes', options.edgeTypes.join(','));
+    return request(`/projects/${projectId}/memory/nodes/${encodeURIComponent(nodeId)}/neighbors?${query}`);
+  },
+  getMemoryImpact: (projectId, query) => request(`/projects/${projectId}/memory/impact?${new URLSearchParams({ q: query })}`),
+  compileMemoryContext: (projectId, input) => request(`/projects/${projectId}/memory/context`, { method: 'POST', body: input }),
+  listMemoryContexts: (projectId, limit = 20) => request(`/projects/${projectId}/memory/context?${new URLSearchParams({ limit })}`),
+  getMemoryContext: (projectId, capsuleId) => request(`/projects/${projectId}/memory/context/${encodeURIComponent(capsuleId)}`),
   getTimeline: (projectId) => request(`/projects/${projectId}/timeline`),
   replaceTimeline: (projectId, graph) => request(`/projects/${projectId}/timeline`, { method: 'PUT', body: graph }),
   draftTimeline: (projectId, goal, model) => request(`/projects/${projectId}/timeline/drafts`, { method: 'POST', body: { goal, ...(model ? { model } : {}) } }),

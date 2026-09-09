@@ -236,4 +236,84 @@ export function registerTools(server, services) {
     },
     handler(({ projectId: id, limit }) => services.execution.activityFeed(id, limit))
   );
+
+  server.registerTool(
+    'memory_status',
+    {
+      description: 'Read the local GATE Memory revision, staleness, and structural graph counts.',
+      inputSchema: { projectId },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id }) => services.memory.status(id))
+  );
+
+  server.registerTool(
+    'memory_search',
+    {
+      description: 'Search the local structural graph by file path or symbol name. Results retain repository provenance.',
+      inputSchema: {
+        projectId,
+        query: z.string().trim().min(1).max(500),
+        limit: z.number().int().positive().max(100).optional(),
+        type: z.enum(['file', 'directory', 'repository', 'symbol']).optional()
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, ...input }) => services.memory.search(id, input))
+  );
+
+  server.registerTool(
+    'memory_neighbors',
+    {
+      description: 'Traverse deterministic containment, import, and reference edges around a memory node.',
+      inputSchema: {
+        projectId,
+        nodeId: z.string().trim().min(1).max(500),
+        depth: z.number().int().positive().max(4).optional(),
+        edgeTypes: z.array(z.enum(['CONTAINS', 'IMPORTS', 'REFERENCES'])).max(3).optional()
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, nodeId, depth, edgeTypes }) => services.memory.neighbors(id, nodeId, { depth, edgeTypes }))
+  );
+
+  server.registerTool(
+    'memory_impact',
+    {
+      description: 'Find matching files or symbols, declaring files, transitive import dependents, and affected tests.',
+      inputSchema: { projectId, query: z.string().trim().min(1).max(500), limit: z.number().int().positive().max(25).optional() },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, ...input }) => services.memory.impact(id, input))
+  );
+
+  server.registerTool(
+    'memory_refresh',
+    {
+      description: 'Refresh GATE Memory from the local Git repository. The mutation is idempotent.',
+      inputSchema: { projectId, force: z.boolean().optional(), idempotencyKey },
+      annotations: { idempotentHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, idempotencyKey: key, force = false }) =>
+      services.memory.refresh(id, { force }, actorContext(key))
+    )
+  );
+
+  server.registerTool(
+    'memory_context',
+    {
+      description: 'Compile and persist a token-budgeted context capsule grounded in current GATE Memory and project instructions.',
+      inputSchema: {
+        projectId,
+        goal: z.string().trim().min(3).max(20_000),
+        kind: z.enum(['context', 'planning', 'execution']).optional(),
+        tokenBudget: z.number().int().min(512).max(32_000).optional(),
+        idempotencyKey
+      },
+      annotations: { idempotentHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, idempotencyKey: key, ...input }) =>
+      services.contexts.compile(id, input, actorContext(key))
+    )
+  );
 }

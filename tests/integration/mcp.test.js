@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -7,12 +9,13 @@ import { createMcpServer } from '../../server/mcp/server.js';
 import { buildServices } from '../../server/composition.js';
 import { createTestDatabase } from '../helpers/database.js';
 import { FakeProvider } from '../helpers/fake-provider.js';
+import { createGitFixture } from '../helpers/git.js';
 
-async function setup() {
+async function setup(repoPath = '/tmp/mcp-fixture') {
   const database = createTestDatabase();
   database.db
     .prepare(`INSERT INTO projects(name, repo_path, protected_branches_json) VALUES (?, ?, ?)`)
-    .run('MCP fixture', '/tmp/mcp-fixture', '["main"]');
+    .run('MCP fixture', repoPath, '["main"]');
   const services = buildServices({
     db: database.db,
     config: { worktreeDir: '/tmp/gate-mcp-worktrees', outputLimitBytes: 20_000 },
@@ -25,6 +28,7 @@ async function setup() {
   await client.connect(clientTransport);
   return {
     ...database,
+    services,
     client,
     server,
     async cleanup() {
@@ -49,6 +53,12 @@ test('MCP exposes compact timeline and review tools', async () => {
     assert.ok(names.includes('issue_update'));
     assert.ok(names.includes('note_create'));
     assert.ok(names.includes('activity_feed'));
+    assert.ok(names.includes('memory_status'));
+    assert.ok(names.includes('memory_search'));
+    assert.ok(names.includes('memory_neighbors'));
+    assert.ok(names.includes('memory_impact'));
+    assert.ok(names.includes('memory_refresh'));
+    assert.ok(names.includes('memory_context'));
     assert.equal(names.includes('gate_decide'), false);
 
     const result = await fixture.client.callTool({
@@ -136,5 +146,66 @@ test('MCP creates a tagged bug report and reads it back through the activity fee
     assert.deepEqual(feed.structuredContent.runs, []);
   } finally {
     await fixture.cleanup();
+  }
+});
+
+test('MCP memory impact returns symbol-grounded structural dependents', async () => {
+  const repository = createGitFixture();
+  fs.mkdirSync(path.join(repository.repoPath, 'src'), { recursive: true });
+  fs.writeFileSync(
+    path.join(repository.repoPath, 'src', 'core.js'),
+    'export function stream() {}\n// Normalizes provider output into ordered chunks.\n'
+  );
+  fs.writeFileSync(
+    path.join(repository.repoPath, 'src', 'adapter.js'),
+    "import { stream } from './core.js';\nexport function adapt() { return stream(); }\n"
+  );
+  repository.run(['add', '.']);
+  repository.run(['commit', '-m', 'add MCP memory fixture']);
+  const fixture = await setup(repository.repoPath);
+  try {
+    const refreshed = await fixture.client.callTool({
+      name: 'memory_refresh',
+      arguments: { projectId: 1, force: true, idempotencyKey: 'mcp-memory-refresh' }
+    });
+    assert.equal(refreshed.isError, undefined);
+
+    const impact = await fixture.client.callTool({
+      name: 'memory_impact',
+      arguments: { projectId: 1, query: 'stream' }
+    });
+    assert.equal(impact.isError, undefined);
+    assert.deepEqual(impact.structuredContent.symbols.map((item) => item.name), ['stream']);
+    assert.deepEqual(impact.structuredContent.dependents.map((item) => item.path), ['src/adapter.js']);
+
+    const search = await fixture.client.callTool({
+      name: 'memory_search',
+      arguments: { projectId: 1, query: 'normalizes ordered chunks' }
+    });
+    assert.equal(search.structuredContent.items[0].matchStrategy, 'semantic');
+    const symbolId = impact.structuredContent.symbols[0].id;
+    const neighborhood = await fixture.client.callTool({
+      name: 'memory_neighbors',
+      arguments: { projectId: 1, nodeId: symbolId, depth: 2, edgeTypes: ['REFERENCES'] }
+    });
+    assert.deepEqual(neighborhood.structuredContent.edgeTypes, ['REFERENCES']);
+    assert.ok(neighborhood.structuredContent.edges.every((edge) => edge.type === 'REFERENCES'));
+
+    const context = await fixture.client.callTool({
+      name: 'memory_context',
+      arguments: {
+        projectId: 1,
+        goal: 'Change provider stream normalization',
+        kind: 'execution',
+        tokenBudget: 1200,
+        idempotencyKey: 'mcp-memory-context'
+      }
+    });
+    assert.equal(context.isError, undefined);
+    assert.equal(context.structuredContent.kind, 'execution');
+    assert.ok(context.structuredContent.provenance.sourceFiles.includes('src/core.js'));
+  } finally {
+    await fixture.cleanup();
+    repository.close();
   }
 });
