@@ -14,6 +14,7 @@ const projectInput = z.object({
   productionBranch: branch,
   stableBranch: branch,
   protectedBranches: z.array(z.string().trim().min(1).max(250)).max(50).default([]),
+  branchPrefix: z.string().trim().max(250).default('work/gate-'),
   interactionLevel: z.enum(['observe', 'assist', 'automatic', 'custom']).default('assist'),
   providerKind: z.string().trim().min(1).max(80).default('claude'),
   providerConfig: z.record(z.string(), z.unknown()).default({})
@@ -25,6 +26,7 @@ const policyInput = projectInput
     productionBranch: true,
     stableBranch: true,
     protectedBranches: true,
+    branchPrefix: true,
     interactionLevel: true
   })
   .partial();
@@ -40,6 +42,14 @@ export function projectsRouter(projects) {
   const router = Router();
   router.get('/projects', (_req, res) => data(res, projects.list()));
   router.get('/projects/:projectId', (req, res) => data(res, projects.get(Number(req.params.projectId))));
+  router.post('/projects/inspect', async (req, res, next) => {
+    try {
+      const parsed = z.object({ repoPath: z.string().trim().min(1).max(4096) }).parse(req.body);
+      return data(res, await projects.inspect(parsed));
+    } catch (error) {
+      return next(error);
+    }
+  });
   router.post('/projects', requireIdempotency, (req, res) => {
     const project = projects.create(projectInput.parse(req.body), commandContext(req));
     return data(res, project, 201);

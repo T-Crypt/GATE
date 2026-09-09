@@ -39,9 +39,9 @@ test('onboards a project and exposes keyboard-first workstation navigation', asy
   await expect(page.getByRole('heading', { name: 'Connect your first project' })).toBeVisible();
   await page.getByLabel('Project name').fill('Workbench');
   await page.getByLabel('Repository path').fill('/tmp/gate-browser-project');
-  await page.getByLabel('Base branch').fill('main');
-  await page.getByLabel('Stable branch').fill('stable');
-  await page.getByLabel('Production branch').fill('production');
+  await expect(page.getByLabel('Branch naming prefix')).toHaveValue('work/gate-');
+  await expect(page.getByLabel('Stable branch')).toHaveCount(0);
+  await expect(page.getByLabel('Production branch')).toHaveCount(0);
   await page
     .getByRole('dialog', { name: 'Connect your first project' })
     .getByRole('button', { name: 'Connect project' })
@@ -161,7 +161,6 @@ test('can connect and switch between multiple projects', async ({ page, request 
   await expect(page.getByRole('heading', { name: 'Connect a project' })).toBeVisible();
   await page.getByLabel('Project name').fill('Second Project');
   await page.getByLabel('Repository path').fill('/tmp/gate-browser-project');
-  await page.getByLabel('Base branch').fill('main');
   await page
     .getByRole('dialog', { name: 'Connect a project' })
     .getByRole('button', { name: 'Connect project' })
@@ -206,7 +205,8 @@ test('overview, issues, and git render distinct views instead of one shared dash
 
   await page.goto('/#/git');
   await expect(page.locator('#gitPanel')).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Sync/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sync remote' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sync main' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Commits', exact: true })).toBeVisible();
   await expect(page.locator('#issuesPanel')).toHaveCount(0);
   await expect(page.getByPlaceholder('Capture a local work item')).toHaveCount(0);

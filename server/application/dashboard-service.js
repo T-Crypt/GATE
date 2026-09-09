@@ -154,6 +154,15 @@ export class DashboardService {
     }
   }
 
+  async branches(projectId) {
+    const project = this.projects.get(projectId);
+    try {
+      return await this.git.branches(project.repoPath);
+    } catch {
+      return [];
+    }
+  }
+
   async #changedFiles(project, gitEvents) {
     const baseSha = gitEvents[0]?.commit_hash;
     if (!baseSha) return [];

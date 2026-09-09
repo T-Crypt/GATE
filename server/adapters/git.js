@@ -108,7 +108,34 @@ export class GitAdapter {
     };
   }
 
-  async createRunWorktree({ repoPath, baseBranch, protectedBranches, runId, parentDir }) {
+  async remoteOrigin(repoPath) {
+    const root = fs.realpathSync(await git(repoPath, ['rev-parse', '--show-toplevel']));
+    try {
+      return await git(root, ['remote', 'get-url', 'origin']);
+    } catch {
+      return null;
+    }
+  }
+
+  async defaultBranch(repoPath) {
+    const root = fs.realpathSync(await git(repoPath, ['rev-parse', '--show-toplevel']));
+    try {
+      const symbolic = await git(root, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']);
+      return symbolic.replace(/^origin\//, '');
+    } catch {
+      const head = await git(root, ['rev-parse', '--symbolic-full-name', 'HEAD']).catch(() => 'main');
+      return head.replace(/^refs\/heads\//, '') || 'main';
+    }
+  }
+
+  async branches(repoPath) {
+    const root = fs.realpathSync(await git(repoPath, ['rev-parse', '--show-toplevel']));
+    const refs = await git(root, ['for-each-ref', '--format=%(refname:short)', 'refs/heads/'])
+      .catch(() => '');
+    return refs.split('\n').filter(Boolean);
+  }
+
+  async createRunWorktree({ repoPath, baseBranch, protectedBranches, runId, parentDir, branchPrefix = 'work/gate-' }) {
     assertProtectedPolicy(baseBranch, protectedBranches);
     const source = await this.inspect(repoPath);
     if (source.dirty) {
@@ -120,7 +147,7 @@ export class GitAdapter {
 
     await git(source.root, ['check-ref-format', '--branch', baseBranch]);
     const baseSha = await git(source.root, ['rev-parse', '--verify', `${baseBranch}^{commit}`]);
-    const branch = `work/gate-${safeRunId(runId)}`;
+    const branch = `${branchPrefix}${safeRunId(runId)}`;
     await git(source.root, ['check-ref-format', '--branch', branch]);
     const parent = path.resolve(parentDir);
     fs.mkdirSync(parent, { recursive: true });

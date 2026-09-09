@@ -12,8 +12,9 @@ The name is literal. The core domain object is the **gate**: a checkpoint a step
 ## What it does
 
 - **Plans before it acts.** You give Gate a goal and repository context. Claude returns a graph of milestones and steps with explicit dependencies and gates, not a wall of text. Nothing executes until you accept the draft.
-- **Runs in isolation.** Every accepted step gets its own linked worktree on a branch named `work/gate-<run-id>`, created from your base branch without ever checking it out or modifying it. Gate refuses to start a run if that base checkout has uncommitted changes.
-- **Never touches your protected branches.** Base, stable, and production branches are configured once and locked. Gate will not execute on them, merge into them, push to them, delete them, or rewrite them. There's no merge or integration command anywhere in the app: a human reviews the resulting branch and decides what happens to it, outside Gate entirely.
+- **Runs in isolation.** Every accepted step gets its own linked worktree on a branch named with the project's run-branch prefix — `work/gate-<run-id>` by default, per-project configurable — created from your base branch without ever checking it out or modifying it. Gate refuses to start a run if that base checkout has uncommitted changes.
+- **Never touches your protected branches.** Connect auto-detects the repository's default branch as the single protected base branch; optional stable and production branches can be added from Settings. Gate will not execute on protected branches, merge into them, push to them, delete them, or rewrite them. There's no merge or integration command anywhere in the app: a human reviews the resulting branch and decides what happens to it, outside Gate entirely.
+- **Shows the remote picture without writing to it.** With `GATE_GITHUB_TOKEN` set, the Git view observes open pull requests and repository issues over the GitHub API — read-only. Gate never creates, merges, or pushes a branch on your behalf.
 - **Ties evidence to a commit.** Gate binds evidence submitted against a gate to a specific commit SHA and file scope. If the branch moves or a file in that scope changes afterward, the evidence goes stale and can no longer satisfy the gate. Approval gates require a decision from a human actor; Gate rejects an agent that tries to approve its own work.
 - **Records every command as an event.** Each command appends an ordered, immutable event and updates its read model in one transaction. That event stream also drives the live UI over WebSocket. A client that drops and reconnects gets replayed exactly the events it missed, no gaps or duplicates.
 - **Shows you the whole plan at once.** The timeline view renders a mile-marker rail across the top: one colored badge per milestone, connected by a track, showing which milestones are gating which. Each milestone's lane carries the same color as its marker, so the overview and the detail stay visually tied together.
@@ -23,7 +24,7 @@ The name is literal. The core domain object is the **gate**: a checkpoint a step
 ## Safety contract
 
 - Binds to `127.0.0.1` by default. No telemetry, no cloud service.
-- Never executes on, merges into, pushes, deletes, or rewrites base, stable, or production branches.
+- Never executes on, merges into, pushes, deletes, or rewrites protected branches (the connected default branch, plus any stable/production branches you add in Settings). Remote observation is strictly read-only.
 - Agents submit evidence. Only a human actor can approve a gate.
 - Every automatic run gets its own branch in a linked worktree, never the base checkout.
 - Validation artifacts live under `data/tests/<project-id>/` and stay local.

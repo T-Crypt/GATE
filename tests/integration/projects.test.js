@@ -5,6 +5,7 @@ import { test } from 'node:test';
 
 import { EventStore } from '../../server/application/event-store.js';
 import { ProjectService } from '../../server/application/project-service.js';
+import { GitAdapter } from '../../server/adapters/git.js';
 import { createTestDatabase } from '../helpers/database.js';
 import { createRepository } from '../helpers/project.js';
 
@@ -38,6 +39,7 @@ test('create canonicalizes a Git project and always protects its base branch', (
     assert.equal(project.name, 'Workbench');
     assert.equal(project.repoPath, repository.repoPath);
     assert.deepEqual(project.protectedBranches, ['main', 'production', 'stable']);
+    assert.equal(project.branchPrefix, 'work/gate-');
     assert.equal(events.readAfter(project.id, 0, 20)[0].type, 'project.created');
 
     const gitignore = fs.readFileSync(path.join(repository.repoPath, '.gitignore'), 'utf8');
@@ -194,6 +196,46 @@ test('provider updates reject non-object config', () => {
       () => projects.updateProvider(project.id, { providerConfig: 'nope' }, context('provider-bad-config')),
       (error) => error.code === 'VALIDATION_FAILED'
     );
+  } finally {
+    close();
+    repository.close();
+  }
+});
+
+test('inspect detects the default branch and origin of a repository', async () => {
+  const repository = createRepository();
+  const { db, close } = createTestDatabase();
+  const events = new EventStore(db);
+  const projects = new ProjectService(db, events, new GitAdapter());
+
+  try {
+    const inspected = await projects.inspect({ repoPath: repository.repoPath });
+    assert.equal(typeof inspected.defaultBranch, 'string');
+    assert.ok(inspected.repoPath);
+    assert.notEqual(inspected.defaultBranch.length, 0);
+  } finally {
+    close();
+    repository.close();
+  }
+});
+
+test('policy update persists a custom branch prefix', () => {
+  const repository = createRepository();
+  const { db, close } = createTestDatabase();
+  const projects = new ProjectService(db, new EventStore(db));
+
+  try {
+    const project = projects.create(
+      { name: 'Workbench', repoPath: repository.repoPath },
+      context('create-prefix')
+    );
+    const updated = projects.updatePolicy(
+      project.id,
+      { branchPrefix: 'feat/' },
+      context('prefix-update')
+    );
+    assert.equal(updated.branchPrefix, 'feat/');
+    assert.equal(project.branchPrefix, 'work/gate-');
   } finally {
     close();
     repository.close();
