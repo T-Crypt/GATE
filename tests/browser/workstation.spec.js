@@ -129,6 +129,29 @@ test('settings always retains the base branch as protected', async ({ page, requ
   await expect(page.getByLabel('main protected')).toBeDisabled();
 });
 
+test('can switch the provider backend from settings', async ({ page, request }) => {
+  const project = await ensureProject(request);
+  await page.goto('/#/settings');
+  await page.getByLabel('Active project').selectOption(String(project.id));
+  await page.getByLabel('Backend provider').selectOption('opencode');
+  await page.getByLabel('Model').fill('opencode/big-pickle');
+  await page.getByRole('button', { name: 'Save provider' }).click();
+  await expect(page.getByLabel('Backend provider')).toHaveValue('opencode');
+  await expect(page.getByLabel('Model')).toHaveValue('opencode/big-pickle');
+});
+
+test('timeline draft form preselects the OpenCode default model', async ({ page, request }) => {
+  const project = await ensureProject(request);
+  await request.patch(`/api/v1/projects/${project.id}/provider`, {
+    headers: { 'Idempotency-Key': 'browser-provider-opencode' },
+    data: { providerKind: 'opencode', providerConfig: { model: 'opencode/big-pickle' } }
+  });
+  await page.goto('/#/timeline');
+  await page.getByLabel('Active project').selectOption(String(project.id));
+  await expect(page.getByText('OpenCode planning')).toBeVisible();
+  await expect(page.getByLabel('Draft model')).toHaveValue('opencode/big-pickle');
+});
+
 test('can connect and switch between multiple projects', async ({ page, request }) => {
   const first = await ensureProject(request);
   await page.goto('/');

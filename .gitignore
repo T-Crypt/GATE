@@ -19,6 +19,13 @@ docs/superpowers/
 .claude-plans/
 CLAUDE.local.md
 
+# Local OpenCode configuration (only the shipped Gate skill is committed), the
+# native equivalent of .claude/skills/gate/SKILL.md for OpenCode agents.
+.opencode/*
+!.opencode/skills/
+.opencode/skills/*
+!.opencode/skills/gate/
+
 # Local agent orientation for working on Gate's own source (opencode, Codex, local
 # models) — not the .claude/skills/gate/SKILL.md Gate ships into OTHER projects
 AGENTS.md

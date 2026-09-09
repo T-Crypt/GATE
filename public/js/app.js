@@ -7,6 +7,7 @@ import { initIssues } from './issues.js';
 import { initOverview } from './overview.js';
 import { initReviews } from './reviews.js';
 import { initSettings } from './settings.js';
+import { providerName } from './components.js';
 import { applyEvent, getState, setProject, setRoute, updateState } from './state.js';
 import { initTimeline } from './timeline.js';
 import { applyAccent, getAccent } from './theme.js';
@@ -96,7 +97,7 @@ function renderView() {
   const definitions = {
     overview: ['Project signal', 'Project overview', 'Execution, review, and repository health at a glance.'],
     timeline: ['Guided execution', 'Interactive timeline', 'Milestones, dependencies, code gates, visual gates, and approvals.'],
-    agent: ['Claude provider', 'Agent control', 'Observe current intent, streamed output, and bounded execution.'],
+    agent: [providerName(activeProject(state).providerKind), 'Agent control', 'Observe current intent, streamed output, and bounded execution.'],
     activity: ['Run history', 'Activity', 'Every timeline-driven run against this project, with status and output.'],
     issues: ['Local tracking', 'Issues', 'Small work items linked to branches and timeline context.'],
     git: ['Repository', 'Git activity', 'Commits, branches, and changes observed from this local project.'],

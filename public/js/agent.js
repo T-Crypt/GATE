@@ -1,4 +1,4 @@
-import { escapeHtml, showToast } from './components.js';
+import { escapeHtml, providerName, showToast } from './components.js';
 
 const activeStatuses = new Set(['starting', 'running']);
 
@@ -39,7 +39,7 @@ export function appendLiveActivity(container, activity) {
 }
 
 export async function initAgent(container, context) {
-  container.innerHTML = '<div class="panel agent-workspace"><div class="panel-header"><h2>Claude execution sessions</h2></div><div class="panel-body" id="agentSessionList"></div></div>';
+  container.innerHTML = `<div class="panel agent-workspace"><div class="panel-header"><h2>${escapeHtml(providerName(context.project.providerKind))} execution sessions</h2></div><div class="panel-body" id="agentSessionList"></div></div>`;
   const list = container.querySelector('#agentSessionList');
   try {
     const runs = await context.api.getRuns(context.project.id);

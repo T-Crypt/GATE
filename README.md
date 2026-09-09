@@ -2,13 +2,13 @@
 
 # Gate
 
-Gate is a localhost-first control plane for human-reviewed AI development. You describe a goal in plain language, Claude proposes a dependency-aware timeline of milestones and steps, you review and accept it, and only then does anything run. Every run happens in its own isolated Git worktree and stops at the first unmet dependency or unapproved gate.
+Gate is a localhost-first control plane for human-reviewed AI development. You describe a goal in plain language, a local agent (Claude Code or OpenCode) proposes a dependency-aware timeline of milestones and steps, you review and accept it, and only then does anything run. Every run happens in its own isolated Git worktree and stops at the first unmet dependency or unapproved gate.
 
 The name is literal. The core domain object is the gate: a checkpoint a step must clear (`code`, `test`, `build`, `plan`, `visual`, or `approval`) before the timeline lets it proceed. An agent can attach evidence to a gate. Only a human can decide it.
 
 ## What it does
 
-**Plans before it acts.** You give Gate a goal and repository context. Claude returns a graph of milestones and steps with explicit dependencies and gates, not a wall of text. Nothing executes until you accept the draft.
+**Plans before it acts.** You give Gate a goal and repository context. A local provider returns a graph of milestones and steps with explicit dependencies and gates, not a wall of text. Nothing executes until you accept the draft. The Settings page picks the backend provider (Claude Code or OpenCode) per project; new projects default to Claude.
 
 **Runs in isolation.** Every accepted step gets its own linked worktree on a branch named `work/gate-<run-id>`, created from your base branch without ever checking it out or modifying it. Gate refuses to start a run if that base checkout has uncommitted changes.
 
@@ -34,7 +34,7 @@ The name is literal. The core domain object is the gate: a checkpoint a step mus
 
 ## Start
 
-Requirements: Node.js 24+, Git, and the Claude CLI authenticated locally.
+Requirements: Node.js 24+, Git, and a local provider CLI — the Claude CLI or the OpenCode CLI — authenticated.
 
 ```bash
 npm ci

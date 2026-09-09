@@ -1,6 +1,6 @@
 # MCP interface
 
-Gate runs the same application services over stdio for any MCP client. Today that client is Claude Code; the tool surface has no Claude-specific behavior in it, so any MCP-capable agent can connect the same way once it exists.
+Gate runs the same application services over stdio for any MCP client. Today those clients are Claude Code and OpenCode; the tool surface has no provider-specific behavior in it, so any MCP-capable agent can connect the same way.
 
 ## Connect Claude Code
 
@@ -32,16 +32,26 @@ claude mcp list
 
 Then ask Claude to list Gate projects (`project_list`) to confirm it can reach the server. The server identifies itself as `gate-mcp`; Claude Code surfaces its tools under that prefix (`mcp__gate-mcp__project_list` and so on). `npm run mcp` also starts the same server directly, useful for testing outside Claude Code.
 
+## Connect OpenCode
+
+From the Gate repository root:
+
+```bash
+opencode mcp add gate -- node server/mcp/stdio.js
+```
+
+OpenCode surfaces the tools under the server-name prefix (`gate-mcp_project_list` and so on). The register/verify/reload flow matches Claude Code: confirm with `opencode mcp list`, list Gate projects with `project_list`, and restart OpenCode after adding the server or a skill.
+
 ## The Gate skill
 
-Registering the server tells an agent *what it can do*; the skill tells it *how to work the board* — use the Gate MCP tools for every read and write rather than the CLI or hand-editing `.gate/`, keep timelines dependency-aware, submit commit-bound evidence to gates, and never attempt to approve its own work. Gate's skill lives at [`.claude/skills/gate/SKILL.md`](../.claude/skills/gate/SKILL.md). Copy it into a connected project's `.claude/skills/` and trim rules that don't apply there:
+Registering the server tells an agent *what it can do*; the skill tells it *how to work the board* — use the Gate MCP tools for every read and write rather than the CLI or hand-editing `.gate/`, keep timelines dependency-aware, submit commit-bound evidence to gates, and never attempt to approve its own work. Gate ships two equivalent skills: [`.claude/skills/gate/SKILL.md`](../.claude/skills/gate/SKILL.md) for Claude Code and [`.opencode/skills/gate/SKILL.md`](../.opencode/skills/gate/SKILL.md) for OpenCode. Copy the one that matches your connected agent into that project and trim rules that don't apply there:
 
 ```bash
 mkdir -p .claude/skills/gate
 cp /path/to/gate/.claude/skills/gate/SKILL.md .claude/skills/gate/SKILL.md
 ```
 
-Both the MCP server and skills load at startup, so restart Claude Code after adding either.
+Both the MCP server and skills load at startup, so restart the agent after adding either.
 
 ## Tools
 
@@ -76,4 +86,4 @@ There is no MCP approval tool. This is intentional: an agent can report evidence
 
 ## Multi-provider note
 
-The MCP server and its tool set are provider-agnostic already; nothing here assumes Claude specifically. What's Claude-specific today is the *execution* adapter (`server/adapters/providers/claude.js`) that timeline steps actually run through — see [providers](providers.md). Connecting a different agent over MCP works today; having that same agent be the one Gate schedules to run a step is the part still gated on a second provider adapter shipping.
+The MCP server and its tool set are provider-agnostic already; nothing here assumes Claude specifically. The project's `providerKind` decides which adapter (`server/adapters/providers/claude.js` or `opencode.js`) drafts timelines and runs timeline steps — see [providers](providers.md). Connecting a different agent over MCP works today, and that same agent can be the one Gate schedules to run a step once its `providerKind` is configured in the Settings page.
