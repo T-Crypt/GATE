@@ -6,9 +6,11 @@ import { DashboardService } from './application/dashboard-service.js';
 import { ContextCompiler } from './application/context-compiler.js';
 import { EventStore } from './application/event-store.js';
 import { ExecutionService } from './application/execution-service.js';
+import { FeatureService } from './application/feature-service.js';
 import { InstructionService } from './application/instruction-service.js';
 import { MemoryService } from './application/memory-service.js';
 import { ProjectService } from './application/project-service.js';
+import { PlannerService } from './application/planner-service.js';
 import { RemoteService } from './application/remote-service.js';
 import { RepoMirrorService } from './application/repo-mirror.js';
 import { ReviewService } from './application/review-service.js';
@@ -55,6 +57,8 @@ export function buildServices({ db, config, providers }) {
   const instructions = new InstructionService({ db, projects, eventStore: events });
   const memory = new MemoryService({ db, projects, gitAdapter, eventStore: events });
   const contexts = new ContextCompiler({ db, projects, memory, instructions, gitAdapter, eventStore: events });
+  const features = new FeatureService(db, events, projects);
+  const planner = new PlannerService({ db, events, projects, features, memory, contexts, execution, timeline });
   return {
     db,
     events,
@@ -62,6 +66,8 @@ export function buildServices({ db, config, providers }) {
     instructions,
     memory,
     contexts,
+    features,
+    planner,
     timeline,
     execution,
     reviews: new ReviewService(db, events),
