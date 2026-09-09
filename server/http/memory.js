@@ -21,8 +21,12 @@ export function memoryRouter(memory) {
     return data(res, memory.search(Number(req.params.projectId), { query: query.q, ...query }));
   });
   router.get('/projects/:projectId/memory/nodes/:nodeId/neighbors', (req, res) => {
-    const query = z.object({ depth: z.coerce.number().int().positive().max(4).optional() }).parse(req.query);
-    return data(res, memory.neighbors(Number(req.params.projectId), req.params.nodeId, query));
+    const query = z.object({
+      depth: z.coerce.number().int().positive().max(4).optional(),
+      edgeTypes: z.string().trim().max(200).optional()
+    }).parse(req.query);
+    const edgeTypes = query.edgeTypes ? query.edgeTypes.split(',').map((type) => type.trim()).filter(Boolean) : undefined;
+    return data(res, memory.neighbors(Number(req.params.projectId), req.params.nodeId, { depth: query.depth, edgeTypes }));
   });
   router.get('/projects/:projectId/memory/impact', (req, res) => {
     const query = z.object({ q: z.string().trim().min(1).max(500), limit: z.coerce.number().int().positive().max(25).optional() }).parse(req.query);

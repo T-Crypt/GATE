@@ -331,6 +331,11 @@ input::placeholder,textarea::placeholder { color: var(--faint); }
 .memory-reason { color: var(--text-muted); line-height: 1.35; }
 .memory-impact-section { margin-top: 16px; }
 .memory-impact-section h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-soft); }
+.memory-match { margin-left: auto; white-space: nowrap; }
+.memory-graph-controls,.memory-edge-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.memory-graph-controls label { display: inline-flex; align-items: center; gap: 6px; color: var(--text-soft); font-size: .82rem; }
+.memory-graph-controls select { width: auto; padding: 5px 24px 5px 8px; }
+.memory-edge-summary { margin: 10px 0; gap: 6px; }
 .review-card[data-state="stale"] { border-color: rgba(247,199,106,.3); }
 .review-card[data-state="fresh"] { border-color: rgba(111,231,173,.26); }
 .evidence-state { display: grid; gap: 3px; margin-bottom: 16px; padding: 11px; border: 1px solid var(--line); border-radius: 11px; background: rgba(255,255,255,.018); }

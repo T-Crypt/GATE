@@ -269,11 +269,12 @@ export function registerTools(server, services) {
       inputSchema: {
         projectId,
         nodeId: z.string().trim().min(1).max(500),
-        depth: z.number().int().positive().max(4).optional()
+        depth: z.number().int().positive().max(4).optional(),
+        edgeTypes: z.array(z.enum(['CONTAINS', 'IMPORTS', 'REFERENCES'])).max(3).optional()
       },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
-    handler(({ projectId: id, nodeId, depth }) => services.memory.neighbors(id, nodeId, { depth }))
+    handler(({ projectId: id, nodeId, depth, edgeTypes }) => services.memory.neighbors(id, nodeId, { depth, edgeTypes }))
   );
 
   server.registerTool(

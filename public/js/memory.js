@@ -15,7 +15,11 @@ function nodeLabel(item) {
 
 function nodeList(items, reasons = {}) {
   if (!items.length) return '<p class="settings-copy">No matching graph nodes.</p>';
-  return `<ul class="memory-node-list">${items.map((item) => `<li><button class="memory-node" data-memory-node="${escapeHtml(item.id)}"><span class="badge">${escapeHtml(item.type)}</span><span><code>${escapeHtml(nodeLabel(item))}</code>${reasons[item.id]?.length ? `<small class="memory-reason">${escapeHtml(reasons[item.id].join(' · '))}</small>` : ''}</span></button></li>`).join('')}</ul>`;
+  return `<ul class="memory-node-list">${items.map((item) => {
+    const matchReasons = reasons[item.id] || item.matchReasons || [];
+    const strategy = item.matchStrategy ? `<span class="badge memory-match">${escapeHtml(item.matchStrategy)} ${Math.round(item.score * 100)}%</span>` : '';
+    return `<li><button class="memory-node" data-memory-node="${escapeHtml(item.id)}"><span class="badge">${escapeHtml(item.type)}</span><span><code>${escapeHtml(nodeLabel(item))}</code>${matchReasons.length ? `<small class="memory-reason">${escapeHtml(matchReasons.join(' · '))}</small>` : ''}</span>${strategy}</button></li>`;
+  }).join('')}</ul>`;
 }
 
 function impactSection(title, items, reasons) {
@@ -32,16 +36,22 @@ export async function initMemory(container, { project, api }) {
   }
   container.innerHTML = `
     <div class="memory-grid">
-      <article class="panel memory-status"><div class="panel-header"><div><p class="eyebrow">Local project intelligence</p><h2>Memory index</h2></div><span class="badge" id="memoryState">${escapeHtml(statusLabel(status))}</span></div><div class="panel-body"><dl class="settings-facts"><div><dt>Repository</dt><dd><code>${escapeHtml(status.repositorySha.slice(0, 12))}</code></dd></div><div><dt>Indexed</dt><dd>${status.indexedSha ? `<code>${escapeHtml(status.indexedSha.slice(0, 12))}</code>` : 'Not yet indexed'}</dd></div><div><dt>Graph</dt><dd>${status.counts.files} files · ${status.counts.symbols || 0} symbols · ${status.counts.edges} edges</dd></div><div><dt>Quality</dt><dd>Level ${status.qualityLevel} · ${status.qualityLevel >= 2 ? 'symbols + imports' : 'file graph'}</dd></div></dl><div class="button-row"><button class="button primary" id="refreshMemory">${status.stale ? 'Refresh memory' : 'Rebuild memory'}</button></div><p class="field-hint">Indexes remain local. Secrets, binary files, build output, and <code>.gateignore</code> paths are excluded.</p></div></article>
-      <article class="panel"><div class="panel-header"><div><p class="eyebrow">Structural retrieval</p><h2>Search memory</h2></div></div><div class="panel-body"><form class="form-grid" id="memorySearchForm"><div class="field"><label for="memorySearch">File, module, or symbol</label><input id="memorySearch" autocomplete="off" placeholder="provider cancellation" maxlength="500"></div><button class="button" type="submit">Search</button></form><div id="memorySearchResults" class="memory-results">${emptyState('◇', 'Search the project graph', 'Results retain filesystem or static-parser provenance.')}</div></div></article>
+      <article class="panel memory-status"><div class="panel-header"><div><p class="eyebrow">Local project intelligence</p><h2>Memory index</h2></div><span class="badge" id="memoryState">${escapeHtml(statusLabel(status))}</span></div><div class="panel-body"><dl class="settings-facts"><div><dt>Repository</dt><dd><code>${escapeHtml(status.repositorySha.slice(0, 12))}</code></dd></div><div><dt>Indexed</dt><dd>${status.indexedSha ? `<code>${escapeHtml(status.indexedSha.slice(0, 12))}</code>` : 'Not yet indexed'}</dd></div><div><dt>Graph</dt><dd>${status.counts.files} files · ${status.counts.symbols || 0} symbols · ${status.counts.edges} edges</dd></div><div><dt>Search</dt><dd>${status.counts.documents || 0} local documents</dd></div><div><dt>Quality</dt><dd>Level ${status.qualityLevel} · ${status.qualityLevel >= 3 ? 'hybrid retrieval' : status.qualityLevel >= 2 ? 'symbols + imports' : 'file graph'}</dd></div></dl><div class="button-row"><button class="button primary" id="refreshMemory">${status.stale ? 'Refresh memory' : 'Rebuild memory'}</button></div><p class="field-hint">Indexes remain local. Secrets, binary files, build output, and <code>.gateignore</code> paths are excluded.</p></div></article>
+      <article class="panel"><div class="panel-header"><div><p class="eyebrow">Hybrid retrieval</p><h2>Search memory</h2></div></div><div class="panel-body"><form class="form-grid" id="memorySearchForm"><div class="field"><label for="memorySearch">Intent, file, module, or symbol</label><input id="memorySearch" autocomplete="off" placeholder="where provider cancellation is handled" maxlength="500"></div><button class="button" type="submit">Search</button></form><div id="memorySearchResults" class="memory-results">${emptyState('◇', 'Search the project graph', 'Exact graph matches are combined with local full-text source retrieval.')}</div></div></article>
       <article class="panel settings-wide"><div class="panel-header"><div><p class="eyebrow">Deterministic impact preview</p><h2>Impact</h2></div></div><div class="panel-body"><form class="form-grid memory-impact-form" id="memoryImpactForm"><div class="field"><label for="memoryImpact">Filename, module, or symbol</label><input id="memoryImpact" autocomplete="off" placeholder="provider streaming" maxlength="500"></div><button class="button" type="submit">Analyze impact</button></form><div id="memoryImpactResults" class="memory-results"><p class="settings-copy">Impact follows persisted import and symbol-reference edges to production dependents and tests. Results are deterministic repository facts.</p></div></div></article>
+      <article class="panel settings-wide"><div class="panel-header"><div><p class="eyebrow">Focused graph explorer</p><h2>Neighborhood</h2></div></div><div class="panel-body"><div class="memory-graph-controls"><label>Depth <select id="memoryGraphDepth"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></label>${['CONTAINS', 'IMPORTS', 'REFERENCES'].map((type) => `<label><input type="checkbox" name="memoryEdgeType" value="${type}" checked> ${type}</label>`).join('')}</div><div id="memoryGraphResults" class="memory-results">${emptyState('◎', 'Select a memory result', 'The explorer loads only the selected node neighborhood and keeps a list fallback.')}</div></div></article>
     </div>`;
 
   async function showNeighbors(nodeId) {
     try {
-      const graph = await api.getMemoryNeighbors(project.id, nodeId, 1);
-      const text = graph.nodes.map((node) => node.path || node.name).join(', ') || 'No connected nodes.';
-      showToast(`Graph neighborhood: ${text.slice(0, 220)}`);
+      const depth = Number(container.querySelector('#memoryGraphDepth').value);
+      const edgeTypes = [...container.querySelectorAll('[name="memoryEdgeType"]:checked')].map((input) => input.value);
+      const graph = await api.getMemoryNeighbors(project.id, nodeId, { depth, edgeTypes });
+      const target = container.querySelector('#memoryGraphResults');
+      const related = graph.nodes.filter((node) => node.id !== graph.node.id);
+      const edgeCounts = Object.entries(graph.edges.reduce((counts, edge) => ({ ...counts, [edge.type]: (counts[edge.type] || 0) + 1 }), {}));
+      target.innerHTML = `<p class="settings-copy"><strong>${escapeHtml(nodeLabel(graph.node))}</strong> · ${related.length} related nodes · ${graph.edges.length} edges</p><div class="memory-edge-summary">${edgeCounts.map(([type, count]) => `<span class="badge">${escapeHtml(type)} ${count}</span>`).join('')}</div>${nodeList(related)}`;
+      bindNodes(target);
     } catch (error) {
       showToast(error.message, 'error');
     }

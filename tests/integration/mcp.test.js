@@ -151,7 +151,10 @@ test('MCP creates a tagged bug report and reads it back through the activity fee
 test('MCP memory impact returns symbol-grounded structural dependents', async () => {
   const repository = createGitFixture();
   fs.mkdirSync(path.join(repository.repoPath, 'src'), { recursive: true });
-  fs.writeFileSync(path.join(repository.repoPath, 'src', 'core.js'), 'export function stream() {}\n');
+  fs.writeFileSync(
+    path.join(repository.repoPath, 'src', 'core.js'),
+    'export function stream() {}\n// Normalizes provider output into ordered chunks.\n'
+  );
   fs.writeFileSync(
     path.join(repository.repoPath, 'src', 'adapter.js'),
     "import { stream } from './core.js';\nexport function adapt() { return stream(); }\n"
@@ -173,6 +176,19 @@ test('MCP memory impact returns symbol-grounded structural dependents', async ()
     assert.equal(impact.isError, undefined);
     assert.deepEqual(impact.structuredContent.symbols.map((item) => item.name), ['stream']);
     assert.deepEqual(impact.structuredContent.dependents.map((item) => item.path), ['src/adapter.js']);
+
+    const search = await fixture.client.callTool({
+      name: 'memory_search',
+      arguments: { projectId: 1, query: 'normalizes ordered chunks' }
+    });
+    assert.equal(search.structuredContent.items[0].matchStrategy, 'semantic');
+    const symbolId = impact.structuredContent.symbols[0].id;
+    const neighborhood = await fixture.client.callTool({
+      name: 'memory_neighbors',
+      arguments: { projectId: 1, nodeId: symbolId, depth: 2, edgeTypes: ['REFERENCES'] }
+    });
+    assert.deepEqual(neighborhood.structuredContent.edgeTypes, ['REFERENCES']);
+    assert.ok(neighborhood.structuredContent.edges.every((edge) => edge.type === 'REFERENCES'));
   } finally {
     await fixture.cleanup();
     repository.close();

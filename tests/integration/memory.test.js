@@ -47,7 +47,7 @@ test('memory refresh builds a local file graph while excluding secrets and .gate
 
     assert.equal(refreshed.mode, 'full');
     assert.equal(status.stale, false);
-    assert.equal(status.qualityLevel, 2);
+    assert.equal(status.qualityLevel, 3);
     assert.ok(status.counts.files >= 3);
     assert.ok(search.items.some((item) => item.path === 'src/server.js'));
     assert.equal(search.items.some((item) => item.path === '.env'), false);
@@ -142,6 +142,87 @@ test('memory impact follows symbol references through production dependents to t
     assert.ok(impact.edges.every((edge) => edge.provenance.origin === 'static_parser'));
     assert.match(impact.reasons[impact.dependents[0].id].join(' '), /imports|references/i);
     assert.equal(new Set(impact.tests.map((node) => node.id)).size, impact.tests.length);
+  } finally {
+    close();
+    repository.close();
+  }
+});
+
+test('memory search combines exact graph matches with local source-content retrieval', async () => {
+  const repository = createGitFixture();
+  const { db, close } = createTestDatabase();
+  const events = new EventStore(db);
+  const projects = new ProjectService(db, events, new GitAdapter());
+  const memory = new MemoryService({ db, projects, gitAdapter: new GitAdapter(), eventStore: events });
+
+  try {
+    fs.mkdirSync(path.join(repository.repoPath, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(repository.repoPath, 'src', 'execution-policy.js'),
+      "export function abortRun() {}\n// Terminate a running provider process after cancellation.\n"
+    );
+    repository.run(['add', '.']);
+    repository.run(['commit', '-m', 'add semantic fixture']);
+    const project = projects.create({ name: 'Semantic fixture', repoPath: repository.repoPath }, context('create-semantic'));
+    await memory.refresh(project.id, { force: true }, context('memory-semantic-refresh'));
+
+    const semantic = memory.search(project.id, { query: 'terminate running provider' });
+    const exact = memory.search(project.id, { query: 'abortRun' });
+    const status = await memory.status(project.id);
+
+    assert.equal(semantic.items[0].path, 'src/execution-policy.js');
+    assert.equal(semantic.items[0].matchStrategy, 'semantic');
+    assert.ok(semantic.items[0].matchReasons.some((reason) => /source content/i.test(reason)));
+    assert.equal(exact.items[0].type, 'symbol');
+    assert.equal(exact.items[0].name, 'abortRun');
+    assert.equal(exact.items[0].matchStrategy, 'hybrid');
+    assert.ok(exact.items[0].score > semantic.items[0].score);
+    assert.equal(status.qualityLevel, 3);
+    assert.ok(status.counts.documents >= 2);
+
+    fs.writeFileSync(
+      path.join(repository.repoPath, 'src', 'execution-policy.js'),
+      "export function finishRun() {}\n// Complete active execution cleanly.\n"
+    );
+    repository.run(['add', '.']);
+    repository.run(['commit', '-m', 'replace semantic terms']);
+    await memory.refresh(project.id, {}, context('memory-semantic-incremental'));
+
+    assert.equal(memory.search(project.id, { query: 'terminate running provider' }).items.length, 0);
+    assert.equal(memory.search(project.id, { query: 'finishRun' }).items[0].name, 'finishRun');
+  } finally {
+    close();
+    repository.close();
+  }
+});
+
+test('memory neighborhoods can be restricted to deterministic relationship types', async () => {
+  const repository = createGitFixture();
+  const { db, close } = createTestDatabase();
+  const events = new EventStore(db);
+  const projects = new ProjectService(db, events, new GitAdapter());
+  const memory = new MemoryService({ db, projects, gitAdapter: new GitAdapter(), eventStore: events });
+
+  try {
+    fs.mkdirSync(path.join(repository.repoPath, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(repository.repoPath, 'src', 'core.js'), 'export function serve() {}\n');
+    fs.writeFileSync(path.join(repository.repoPath, 'src', 'api.js'), "import { serve } from './core.js';\nserve();\n");
+    repository.run(['add', '.']);
+    repository.run(['commit', '-m', 'add neighborhood fixture']);
+    const project = projects.create({ name: 'Neighborhood fixture', repoPath: repository.repoPath }, context('create-neighborhood'));
+    await memory.refresh(project.id, { force: true }, context('memory-neighborhood-refresh'));
+    const symbol = memory.search(project.id, { query: 'serve', type: 'symbol' }).items[0];
+
+    const graph = memory.neighbors(project.id, symbol.id, { depth: 2, edgeTypes: ['REFERENCES'] });
+
+    assert.deepEqual(graph.edgeTypes, ['REFERENCES']);
+    assert.ok(graph.edges.length > 0);
+    assert.ok(graph.edges.every((edge) => edge.type === 'REFERENCES'));
+    assert.deepEqual(graph.nodes.filter((node) => node.type === 'file').map((node) => node.path), ['src/api.js']);
+    assert.throws(
+      () => memory.neighbors(project.id, symbol.id, { edgeTypes: ['INFERRED_BY_MODEL'] }),
+      /edge type/i
+    );
   } finally {
     close();
     repository.close();

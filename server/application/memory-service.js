@@ -1,6 +1,9 @@
 import { runIdempotent } from './idempotency.js';
 import { MemoryIndexService } from './memory-index-service.js';
-import { notFound } from '../domain/errors.js';
+import { SemanticSearchService } from './semantic-search-service.js';
+import { notFound, validation } from '../domain/errors.js';
+
+const EDGE_TYPES = new Set(['CONTAINS', 'IMPORTS', 'REFERENCES']);
 
 function decodeNode(row) {
   if (!row) return row;
@@ -41,12 +44,13 @@ function uniqueNodes(nodes) {
 }
 
 export class MemoryService {
-  constructor({ db, projects, gitAdapter, eventStore, indexService = new MemoryIndexService() }) {
+  constructor({ db, projects, gitAdapter, eventStore, indexService = new MemoryIndexService(), semanticSearch }) {
     this.db = db;
     this.projects = projects;
     this.git = gitAdapter;
     this.events = eventStore;
     this.index = indexService;
+    this.semantic = semanticSearch || new SemanticSearchService(db);
   }
 
   async status(projectId) {
@@ -57,16 +61,17 @@ export class MemoryService {
       `SELECT
          (SELECT COUNT(*) FROM memory_nodes WHERE project_id = ? AND node_type = 'file') AS files,
          (SELECT COUNT(*) FROM memory_nodes WHERE project_id = ? AND node_type = 'symbol') AS symbols,
+         (SELECT COUNT(*) FROM memory_search WHERE project_id = ?) AS documents,
          (SELECT COUNT(*) FROM memory_nodes WHERE project_id = ?) AS nodes,
          (SELECT COUNT(*) FROM memory_edges WHERE project_id = ?) AS edges`
-    ).get(projectId, projectId, projectId, projectId);
+    ).get(projectId, projectId, projectId, projectId, projectId);
     return {
       projectId,
       state: revision?.status || 'unindexed',
       repositorySha: inspected.headSha,
       indexedSha: revision?.repository_sha || null,
       stale: !revision || revision.repository_sha !== inspected.headSha,
-      qualityLevel: counts.symbols > 0 ? 2 : revision ? 1 : 0,
+      qualityLevel: counts.documents > 0 ? 3 : counts.symbols > 0 ? 2 : revision ? 1 : 0,
       counts,
       indexedAt: revision?.indexed_at || null,
       lastError: revision?.last_error || null
@@ -162,26 +167,69 @@ export class MemoryService {
        ORDER BY CASE WHEN lower(name) = lower(?) THEN 0 WHEN lower(path) = lower(?) THEN 1 ELSE 2 END,
          CASE node_type WHEN 'symbol' THEN 0 WHEN 'file' THEN 1 WHEN 'directory' THEN 2 ELSE 3 END, path
        LIMIT ?`
-    ).all(projectId, ...parameters.slice(0, -1), normalized, normalized, parameters.at(-1));
-    return { projectId, query: normalized, items: rows.map(decodeNode) };
+    ).all(projectId, ...parameters.slice(0, -1), normalized, normalized, Math.min(parameters.at(-1) * 2, 200));
+    const semantic = this.semantic.search(projectId, {
+      query: normalized,
+      limit: Math.min(limit(requestedLimit) * 3, 200),
+      type
+    });
+    const semanticById = new Map(semantic.map((item) => [item.nodeId, item]));
+    const candidates = new Map();
+    for (const row of rows) {
+      const node = decodeNode(row);
+      const exactName = node.name.toLowerCase() === normalized.toLowerCase();
+      const exactPath = node.path.toLowerCase() === normalized.toLowerCase();
+      const semanticMatch = semanticById.get(node.id);
+      candidates.set(node.id, {
+        ...node,
+        score: exactName ? 1 : exactPath ? 0.96 : 0.86,
+        matchStrategy: semanticMatch ? 'hybrid' : 'structural',
+        matchReasons: [exactName ? 'Exact node name match' : exactPath ? 'Exact path match' : 'Path or node name match', ...(semanticMatch?.reasons || [])]
+      });
+    }
+    const semanticOnlyIds = semantic.map((item) => item.nodeId).filter((id) => !candidates.has(id));
+    if (semanticOnlyIds.length) {
+      const semanticNodes = this.db.prepare(
+        `SELECT * FROM memory_nodes WHERE project_id = ? AND id IN (${semanticOnlyIds.map(() => '?').join(',')})`
+      ).all(projectId, ...semanticOnlyIds).map(decodeNode);
+      for (const node of semanticNodes) {
+        const match = semanticById.get(node.id);
+        candidates.set(node.id, {
+          ...node,
+          score: match.score,
+          matchStrategy: 'semantic',
+          matchReasons: match.reasons
+        });
+      }
+    }
+    const items = [...candidates.values()]
+      .sort((left, right) => right.score - left.score || left.path.localeCompare(right.path))
+      .slice(0, limit(requestedLimit));
+    return { projectId, query: normalized, items };
   }
 
-  neighbors(projectId, nodeId, { depth = 1 } = {}) {
+  neighbors(projectId, nodeId, { depth = 1, edgeTypes } = {}) {
     this.projects.get(projectId);
     const root = this.db.prepare('SELECT * FROM memory_nodes WHERE project_id = ? AND id = ?').get(projectId, nodeId);
     if (!root) throw notFound('Memory node', nodeId);
     const maxDepth = Math.max(1, Math.min(Number(depth) || 1, 4));
+    const selectedEdgeTypes = edgeTypes?.length ? [...new Set(edgeTypes.map((type) => String(type).toUpperCase()))] : [...EDGE_TYPES];
+    if (selectedEdgeTypes.some((type) => !EDGE_TYPES.has(type))) {
+      throw validation('Unknown memory edge type', { edgeTypes: selectedEdgeTypes });
+    }
     const seen = new Set([nodeId]);
-    const edges = [];
+    const edges = new Map();
     let frontier = [nodeId];
     for (let level = 0; level < maxDepth && frontier.length; level += 1) {
       const placeholders = frontier.map(() => '?').join(',');
+      const edgePlaceholders = selectedEdgeTypes.map(() => '?').join(',');
       const found = this.db.prepare(
-        `SELECT * FROM memory_edges WHERE project_id = ? AND (source_node_id IN (${placeholders}) OR target_node_id IN (${placeholders}))`
-      ).all(projectId, ...frontier, ...frontier);
+        `SELECT * FROM memory_edges WHERE project_id = ? AND edge_type IN (${edgePlaceholders})
+         AND (source_node_id IN (${placeholders}) OR target_node_id IN (${placeholders}))`
+      ).all(projectId, ...selectedEdgeTypes, ...frontier, ...frontier);
       frontier = [];
       for (const edge of found) {
-        edges.push(decodeEdge(edge));
+        edges.set(edge.id, decodeEdge(edge));
         for (const id of [edge.source_node_id, edge.target_node_id]) {
           if (!seen.has(id)) {
             seen.add(id);
@@ -194,13 +242,15 @@ export class MemoryService {
     const nodes = this.db.prepare(
       `SELECT * FROM memory_nodes WHERE project_id = ? AND id IN (${ids.map(() => '?').join(',')}) ORDER BY path`
     ).all(projectId, ...ids).map(decodeNode);
-    return { projectId, node: decodeNode(root), nodes, edges };
+    return { projectId, node: decodeNode(root), nodes, edges: [...edges.values()], edgeTypes: selectedEdgeTypes };
   }
 
   impact(projectId, { query, limit: requestedLimit } = {}) {
     const normalized = String(query || '').trim();
-    const matches = this.search(projectId, { query: normalized, limit: limit(requestedLimit, 25) }).items
+    const candidates = this.search(projectId, { query: normalized, limit: limit(requestedLimit, 25) }).items
       .filter((node) => ['file', 'symbol'].includes(node.type));
+    const exactMatches = candidates.filter((node) => node.score >= 0.95);
+    const matches = exactMatches.length ? exactMatches : candidates;
     const matchedSymbols = matches.filter((node) => node.type === 'symbol');
     const matchedFiles = matches.filter((node) => node.type === 'file');
     const symbolSourcePaths = [...new Set(matchedSymbols.map((node) => node.sourcePath))];

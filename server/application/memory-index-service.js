@@ -86,6 +86,13 @@ function insertEdge(db, { projectId, type, sourceNodeId, targetNodeId, provenanc
   );
 }
 
+function replaceSearchDocument(db, { nodeId: id, projectId, type, name, path: nodePath, content = '' }) {
+  db.prepare('DELETE FROM memory_search WHERE node_id = ?').run(id);
+  db.prepare(
+    'INSERT INTO memory_search(node_id, project_id, node_type, name, path, content) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(id, projectId, type, name, nodePath, content);
+}
+
 export class MemoryIndexService {
   constructor({ languageIndexers = new LanguageIndexerRegistry() } = {}) {
     this.languageIndexers = languageIndexers;
@@ -111,12 +118,14 @@ export class MemoryIndexService {
       if (!entry.isFile() || entry.size > MAX_FILE_BYTES || isExcluded(normalized, false, patterns)) return;
       const buffer = fs.readFileSync(target);
       if (buffer.subarray(0, 4096).includes(0)) return;
-      const analysis = this.languageIndexers.parse({ path: normalized, content: buffer.toString('utf8') });
+      const searchContent = buffer.toString('utf8');
+      const analysis = this.languageIndexers.parse({ path: normalized, content: searchContent });
       records.set(normalized, {
         type: 'file',
         path: normalized,
         name: path.posix.basename(normalized),
         contentHash: createHash('sha256').update(buffer).digest('hex'),
+        searchContent,
         analysis,
         metadata: {
           size: entry.size,
@@ -150,11 +159,17 @@ export class MemoryIndexService {
     const filesystemProvenance = { origin: 'filesystem', repositorySha };
 
     if (isFull) {
+      db.prepare('DELETE FROM memory_search WHERE project_id = ?').run(projectId);
       db.prepare('DELETE FROM memory_edges WHERE project_id = ?').run(projectId);
       db.prepare('DELETE FROM memory_nodes WHERE project_id = ?').run(projectId);
     } else {
       for (const relativePath of changedPaths.map(slash)) {
         const fileId = nodeId(projectId, 'file', relativePath);
+        db.prepare(
+          `DELETE FROM memory_search WHERE project_id = ? AND node_id IN (
+             SELECT id FROM memory_nodes WHERE project_id = ? AND source_path = ?
+           )`
+        ).run(projectId, projectId, relativePath);
         db.prepare("DELETE FROM memory_edges WHERE project_id = ? AND source_node_id = ? AND edge_type IN ('IMPORTS', 'REFERENCES')")
           .run(projectId, fileId);
         db.prepare("DELETE FROM memory_nodes WHERE project_id = ? AND source_path = ? AND node_type = 'symbol'")
@@ -170,6 +185,14 @@ export class MemoryIndexService {
        VALUES (?, ?, 'repository', '', '', ?, NULL, '{}', ?, ?, datetime('now'))
        ON CONFLICT(project_id, node_type, path) DO UPDATE SET indexed_sha = excluded.indexed_sha, updated_at = excluded.updated_at`
     ).run(rootId, projectId, path.basename(root), JSON.stringify(filesystemProvenance), repositorySha);
+    replaceSearchDocument(db, {
+      nodeId: rootId,
+      projectId,
+      type: 'repository',
+      name: path.basename(root),
+      path: '',
+      content: ''
+    });
 
     const orderedRecords = [...records.values()].sort((left, right) => {
       const depth = left.path.split('/').length - right.path.split('/').length;
@@ -190,6 +213,14 @@ export class MemoryIndexService {
         id, projectId, record.type, record.path, record.path, record.name, record.contentHash || null,
         JSON.stringify(record.metadata || {}), JSON.stringify(filesystemProvenance), repositorySha
       );
+      replaceSearchDocument(db, {
+        nodeId: id,
+        projectId,
+        type: record.type,
+        name: record.name,
+        path: record.path,
+        content: record.type === 'file' ? record.searchContent : ''
+      });
       const parent = parentPath(record.path);
       const parentId = parent ? nodeId(projectId, 'directory', parent) : rootId;
       insertEdge(db, {
@@ -222,6 +253,14 @@ export class MemoryIndexService {
             JSON.stringify(provenance),
             repositorySha
           );
+          replaceSearchDocument(db, {
+            nodeId: symbolId,
+            projectId,
+            type: 'symbol',
+            name: symbol.name,
+            path: record.path,
+            content: `${symbol.kind} ${symbol.exported ? 'exported' : 'local'} ${symbol.name}`
+          });
           insertEdge(db, {
             projectId,
             type: 'CONTAINS',
@@ -282,9 +321,10 @@ export class MemoryIndexService {
       `SELECT
          (SELECT COUNT(*) FROM memory_nodes WHERE project_id = ? AND node_type = 'file') AS files,
          (SELECT COUNT(*) FROM memory_nodes WHERE project_id = ? AND node_type = 'symbol') AS symbols,
+         (SELECT COUNT(*) FROM memory_search WHERE project_id = ?) AS documents,
          (SELECT COUNT(*) FROM memory_nodes WHERE project_id = ?) AS nodes,
          (SELECT COUNT(*) FROM memory_edges WHERE project_id = ?) AS edges`
-    ).get(projectId, projectId, projectId, projectId);
+    ).get(projectId, projectId, projectId, projectId, projectId);
     return { ...counts, indexedPaths: [...records.keys()] };
   }
 }

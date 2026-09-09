@@ -45,7 +45,12 @@ export const api = {
   getMemoryStatus: (projectId) => request(`/projects/${projectId}/memory/status`),
   refreshMemory: (projectId, input = {}) => request(`/projects/${projectId}/memory/refresh`, { method: 'POST', body: input }),
   searchMemory: (projectId, query, input = {}) => request(`/projects/${projectId}/memory/search?${new URLSearchParams({ q: query, ...input })}`),
-  getMemoryNeighbors: (projectId, nodeId, depth = 1) => request(`/projects/${projectId}/memory/nodes/${encodeURIComponent(nodeId)}/neighbors?depth=${depth}`),
+  getMemoryNeighbors: (projectId, nodeId, input = {}) => {
+    const options = typeof input === 'number' ? { depth: input } : input;
+    const query = new URLSearchParams({ depth: options.depth || 1 });
+    if (options.edgeTypes?.length) query.set('edgeTypes', options.edgeTypes.join(','));
+    return request(`/projects/${projectId}/memory/nodes/${encodeURIComponent(nodeId)}/neighbors?${query}`);
+  },
   getMemoryImpact: (projectId, query) => request(`/projects/${projectId}/memory/impact?${new URLSearchParams({ q: query })}`),
   getTimeline: (projectId) => request(`/projects/${projectId}/timeline`),
   replaceTimeline: (projectId, graph) => request(`/projects/${projectId}/timeline`, { method: 'PUT', body: graph }),

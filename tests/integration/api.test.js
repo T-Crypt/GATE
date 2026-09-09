@@ -152,7 +152,10 @@ test('memory routes refresh and search the local file graph', async () => {
   const fixture = setup();
   try {
     fs.mkdirSync(path.join(gitFixture.repoPath, 'src'), { recursive: true });
-    fs.writeFileSync(path.join(gitFixture.repoPath, 'src', 'provider.js'), 'export function stream() {}\n');
+    fs.writeFileSync(
+      path.join(gitFixture.repoPath, 'src', 'provider.js'),
+      'export function stream() {}\n// Emits streaming chunks to the configured harness.\n'
+    );
     fs.writeFileSync(
       path.join(gitFixture.repoPath, 'src', 'consumer.js'),
       "import { stream } from './provider.js';\nexport const consume = () => stream();\n"
@@ -179,6 +182,18 @@ test('memory routes refresh and search the local file graph', async () => {
     const symbols = await request(fixture.app).get(`/api/v1/projects/${projectId}/memory/search?q=stream&type=symbol`);
     assert.equal(symbols.status, 200);
     assert.deepEqual(symbols.body.data.items.map((item) => item.name), ['stream']);
+
+    const semantic = await request(fixture.app).get(`/api/v1/projects/${projectId}/memory/search?q=emits+configured+harness`);
+    assert.equal(semantic.status, 200);
+    assert.equal(semantic.body.data.items[0].path, 'src/provider.js');
+    assert.equal(semantic.body.data.items[0].matchStrategy, 'semantic');
+
+    const neighborhood = await request(fixture.app).get(
+      `/api/v1/projects/${projectId}/memory/nodes/${encodeURIComponent(symbols.body.data.items[0].id)}/neighbors?depth=2&edgeTypes=REFERENCES`
+    );
+    assert.equal(neighborhood.status, 200);
+    assert.deepEqual(neighborhood.body.data.edgeTypes, ['REFERENCES']);
+    assert.ok(neighborhood.body.data.edges.every((edge) => edge.type === 'REFERENCES'));
 
     const impact = await request(fixture.app).get(`/api/v1/projects/${projectId}/memory/impact?q=stream`);
     assert.equal(impact.status, 200);
