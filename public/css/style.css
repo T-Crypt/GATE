@@ -169,6 +169,7 @@ input::placeholder,textarea::placeholder { color: var(--faint); }
 .goal-panel p:not(.eyebrow) { margin-bottom: 0; color: var(--muted); font-size: 12px; }
 .goal-form { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 9px; align-items: stretch; }
 .goal-form textarea { min-height: 72px; }
+.goal-options { grid-column: 1 / -1; max-width: 280px; }
 .draft-review { grid-column: 1/-1; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid rgba(157,140,255,.26); border-radius: 12px; background: var(--violet-soft); }
 .draft-review strong,.draft-review span { display: block; }
 .draft-review span { margin-top: 3px; color: var(--muted); font-size: 11px; }
@@ -301,6 +302,15 @@ input::placeholder,textarea::placeholder { color: var(--faint); }
 .git-status-strip strong { color: var(--text-soft); font-weight: 600; }
 .changed-files-list { display: grid; gap: 4px; margin: 10px 0 0; }
 .changed-file-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,.014); color: var(--text-soft); font: 10px ui-monospace, monospace; }
+.status-dot.muted { background: var(--faint); }
+.issue-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.issue-card-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.issue-card-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; }
+.issue-card-sub code { color: var(--cyan); }
+.pr-ref { color: var(--faint); font: 10px ui-monospace, monospace; }
+.branch-list { display: grid; gap: 6px; }
+.branch-row { display: flex; align-items: center; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,.014); }
+.branch-row code { color: var(--text-soft); font: 10px ui-monospace, monospace; }
 .rail-track { position: relative; display: grid; gap: 0; margin-top: 4px; padding-left: 18px; }
 .rail-track::before { position: absolute; top: 6px; bottom: 6px; left: 5px; width: 1px; background: var(--line-strong); content: ""; }
 .rail-row { position: relative; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 11px; }

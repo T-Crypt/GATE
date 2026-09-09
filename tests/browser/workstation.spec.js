@@ -39,9 +39,9 @@ test('onboards a project and exposes keyboard-first workstation navigation', asy
   await expect(page.getByRole('heading', { name: 'Connect your first project' })).toBeVisible();
   await page.getByLabel('Project name').fill('Workbench');
   await page.getByLabel('Repository path').fill('/tmp/gate-browser-project');
-  await page.getByLabel('Base branch').fill('main');
-  await page.getByLabel('Stable branch').fill('stable');
-  await page.getByLabel('Production branch').fill('production');
+  await expect(page.getByLabel('Branch naming prefix')).toHaveValue('work/gate-');
+  await expect(page.getByLabel('Stable branch')).toHaveCount(0);
+  await expect(page.getByLabel('Production branch')).toHaveCount(0);
   await page
     .getByRole('dialog', { name: 'Connect your first project' })
     .getByRole('button', { name: 'Connect project' })
@@ -129,6 +129,29 @@ test('settings always retains the base branch as protected', async ({ page, requ
   await expect(page.getByLabel('main protected')).toBeDisabled();
 });
 
+test('can switch the provider backend from settings', async ({ page, request }) => {
+  const project = await ensureProject(request);
+  await page.goto('/#/settings');
+  await page.getByLabel('Active project').selectOption(String(project.id));
+  await page.getByLabel('Backend provider').selectOption('opencode');
+  await page.getByLabel('Model').fill('opencode/big-pickle');
+  await page.getByRole('button', { name: 'Save provider' }).click();
+  await expect(page.getByLabel('Backend provider')).toHaveValue('opencode');
+  await expect(page.getByLabel('Model')).toHaveValue('opencode/big-pickle');
+});
+
+test('timeline draft form preselects the OpenCode default model', async ({ page, request }) => {
+  const project = await ensureProject(request);
+  await request.patch(`/api/v1/projects/${project.id}/provider`, {
+    headers: { 'Idempotency-Key': 'browser-provider-opencode' },
+    data: { providerKind: 'opencode', providerConfig: { model: 'opencode/big-pickle' } }
+  });
+  await page.goto('/#/timeline');
+  await page.getByLabel('Active project').selectOption(String(project.id));
+  await expect(page.getByText('OpenCode planning')).toBeVisible();
+  await expect(page.getByLabel('Draft model')).toHaveValue('opencode/big-pickle');
+});
+
 test('can connect and switch between multiple projects', async ({ page, request }) => {
   const first = await ensureProject(request);
   await page.goto('/');
@@ -138,7 +161,6 @@ test('can connect and switch between multiple projects', async ({ page, request 
   await expect(page.getByRole('heading', { name: 'Connect a project' })).toBeVisible();
   await page.getByLabel('Project name').fill('Second Project');
   await page.getByLabel('Repository path').fill('/tmp/gate-browser-project');
-  await page.getByLabel('Base branch').fill('main');
   await page
     .getByRole('dialog', { name: 'Connect a project' })
     .getByRole('button', { name: 'Connect project' })
@@ -183,7 +205,8 @@ test('overview, issues, and git render distinct views instead of one shared dash
 
   await page.goto('/#/git');
   await expect(page.locator('#gitPanel')).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Sync/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sync remote' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sync main' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Commits', exact: true })).toBeVisible();
   await expect(page.locator('#issuesPanel')).toHaveCount(0);
   await expect(page.getByPlaceholder('Capture a local work item')).toHaveCount(0);

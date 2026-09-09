@@ -17,7 +17,7 @@ permalink: /docs/troubleshooting/
 | `DIRTY_BASE_WORKTREE` | The base checkout has uncommitted changes. Commit or stash them before starting a run. (Gate's own append of the `.gate/` ignore entry to `.gitignore` is exempt from this check.) |
 | `STEP_BLOCKED` | Dependencies are unfinished or gates unsatisfied. Finish dependencies or satisfy gates; direct starts cannot bypass them. |
 | `STALE_EVIDENCE` | The branch moved or an in-scope file changed after evidence was submitted. Re-run validation at the current run HEAD and submit new evidence. |
-| `PROVIDER_UNAVAILABLE` | The provider cannot be reached. Install and authenticate the Claude CLI, or configure a future provider adapter. |
+| `PROVIDER_UNAVAILABLE` | The project's provider is not registered or its CLI is not reachable. Install and authenticate the Claude CLI or the OpenCode CLI, and confirm the project's `providerKind`. |
 
 ## Interrupted runs
 

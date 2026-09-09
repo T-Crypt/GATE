@@ -31,5 +31,8 @@ export function dashboardRouter(dashboard) {
   router.post('/projects/:projectId/git/sync', requireIdempotency, async (req, res) =>
     data(res, await dashboard.syncGit(Number(req.params.projectId), commandContext(req)))
   );
+  router.get('/projects/:projectId/branches', async (req, res) =>
+    data(res, await dashboard.branches(Number(req.params.projectId)))
+  );
   return router;
 }
