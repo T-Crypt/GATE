@@ -169,6 +169,7 @@ input::placeholder,textarea::placeholder { color: var(--faint); }
 .goal-panel p:not(.eyebrow) { margin-bottom: 0; color: var(--muted); font-size: 12px; }
 .goal-form { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 9px; align-items: stretch; }
 .goal-form textarea { min-height: 72px; }
+.goal-options { grid-column: 1 / -1; max-width: 280px; }
 .draft-review { grid-column: 1/-1; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid rgba(157,140,255,.26); border-radius: 12px; background: var(--violet-soft); }
 .draft-review strong,.draft-review span { display: block; }
 .draft-review span { margin-top: 3px; color: var(--muted); font-size: 11px; }

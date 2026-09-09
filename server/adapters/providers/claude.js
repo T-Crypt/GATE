@@ -72,7 +72,8 @@ export class ClaudeProvider {
           '--permission-mode',
           request.permissionMode || 'acceptEdits',
           '--session-id',
-          sessionId
+          sessionId,
+          ...(request.model ? ['--model', request.model] : [])
         ],
         cwd: request.cwd,
         input: request.prompt,
@@ -85,7 +86,7 @@ export class ClaudeProvider {
     return { sessionId, completion: running.completion, cancel: running.cancel };
   }
 
-  async draftTimeline({ goal, repositoryContext, cwd, env }) {
+  async draftTimeline({ goal, repositoryContext, cwd, model, env }) {
     const chunks = [];
     const prompt = [
       'Create a concise implementation timeline for the following local repository goal.',
@@ -110,7 +111,8 @@ export class ClaudeProvider {
           // schema-constrained result directly instead of stopping mid tool-call
           // with an empty structured_output.
           '--tools',
-          ''
+          '',
+          ...(model ? ['--model', model] : [])
         ],
         cwd,
         input: prompt,

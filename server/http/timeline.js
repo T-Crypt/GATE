@@ -25,10 +25,17 @@ export function timelineRouter(timeline, execution) {
     )
   );
   router.post('/projects/:projectId/timeline/drafts', requireIdempotency, async (req, res) => {
-    const body = z.object({ goal: z.string().trim().min(3).max(20_000) }).parse(req.body);
+    const body = z
+      .object({ goal: z.string().trim().min(3).max(20_000), model: z.string().trim().max(200).optional() })
+      .parse(req.body);
     return data(
       res,
-      await execution.draftTimeline(Number(req.params.projectId), body.goal, commandContext(req)),
+      await execution.draftTimeline(
+        Number(req.params.projectId),
+        body.goal,
+        commandContext(req),
+        body.model
+      ),
       201
     );
   });

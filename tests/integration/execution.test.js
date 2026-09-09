@@ -212,3 +212,101 @@ test('drafting a timeline sends the synced project digest as repository context'
     fixture.gitFixture.close();
   }
 });
+
+test('drafting passes a per-draft model override to the provider', async () => {
+  const provider = new FakeProvider();
+  const fixture = setup(provider);
+  try {
+    await fixture.execution.draftTimeline(
+      fixture.project.id,
+      'Add a login page',
+      context('draft-with-model'),
+      'opencode/big-pickle'
+    );
+
+    assert.equal(provider.draftRequests[0].model, 'opencode/big-pickle');
+  } finally {
+    fixture.close();
+    fixture.gitFixture.close();
+  }
+});
+
+test('start passes the project model to the provider on execution', async () => {
+  const provider = new FakeProvider();
+  const fixture = setup(provider);
+  try {
+    fixture.projects.updateProvider(
+      fixture.project.id,
+      { providerConfig: { model: 'opencode/big-pickle' } },
+      context('set-model')
+    );
+    await fixture.execution.schedule(fixture.project.id, context('schedule-with-model'));
+
+    assert.equal(provider.requests[0].model, 'opencode/big-pickle');
+  } finally {
+    fixture.close();
+    fixture.gitFixture.close();
+  }
+});
+
+test('unconfigured providers are refused with PROVIDER_UNAVAILABLE', async () => {
+  const fixture = setup(new FakeProvider());
+  try {
+    fixture.projects.updateProvider(fixture.project.id, { providerKind: 'unknown' }, context('set-unknown'));
+    await assert.rejects(
+      () => fixture.execution.start(fixture.project.id, 'ready-step', context('unknown-provider')),
+      (error) => error.code === 'PROVIDER_UNAVAILABLE' && error.status === 503
+    );
+    assert.equal(fixture.provider.requests.length, 0);
+  } finally {
+    fixture.close();
+    fixture.gitFixture.close();
+  }
+});
+
+test('run completion events are attributed to the configured provider', async () => {
+  const provider = new FakeProvider();
+  const gitFixture = createGitFixture();
+  const database = createTestDatabase();
+  const events = new EventStore(database.db);
+  const projects = new ProjectService(database.db, events);
+  const timeline = new TimelineService(database.db, events);
+  const project = projects.create(
+    {
+      name: 'OpenCode fixture',
+      repoPath: gitFixture.repoPath,
+      baseBranch: 'main',
+      protectedBranches: ['main'],
+      interactionLevel: 'automatic'
+    },
+    context('create-opencode')
+  );
+  projects.updateProvider(project.id, { providerKind: 'opencode' }, context('set-opencode'));
+  timeline.replaceDraft(project.id, timelineGraph(), context('create-timeline-opencode'));
+  const execution = new ExecutionService({
+    db: database.db,
+    eventStore: events,
+    projectService: projects,
+    timelineService: timeline,
+    gitAdapter: new GitAdapter(),
+    providers: new Map([['opencode', provider]]),
+    worktreeDir: gitFixture.worktreeParent,
+    outputLimitBytes: 50_000
+  });
+
+  try {
+    await execution.schedule(project.id, context('schedule-opencode'));
+    const runId = execution.list(project.id)[0].id;
+    for (let attempt = 0; attempt < 50 && execution.get(runId).status !== 'review'; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    const finish = events
+      .readAfter(project.id, 0, 50)
+      .find((event) => event.type === 'agent.run.review');
+    assert.ok(finish, 'expected a completed run event');
+    assert.equal(finish.actor.id, 'opencode');
+  } finally {
+    database.close();
+    gitFixture.close();
+  }
+});

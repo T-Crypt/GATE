@@ -171,6 +171,50 @@ export class ProjectService {
     );
   }
 
+  updateProvider(projectId, input, context) {
+    return runIdempotent(
+      this.db,
+      context,
+      { command: 'project.updateProvider', projectId, input },
+      () => {
+        const current = this.get(projectId);
+        if (input.providerKind !== undefined && !text(input.providerKind, 'providerKind')) {
+          throw validation('providerKind is required', { field: 'providerKind' });
+        }
+        if (
+          input.providerConfig !== undefined &&
+          (typeof input.providerConfig !== 'object' ||
+            input.providerConfig === null ||
+            Array.isArray(input.providerConfig))
+        ) {
+          throw validation('providerConfig must be an object', { field: 'providerConfig' });
+        }
+        const providerKind = input.providerKind ?? current.providerKind;
+        const providerConfig = { ...current.providerConfig, ...(input.providerConfig || {}) };
+
+        this.events.append(
+          {
+            projectId,
+            type: 'project.provider.updated',
+            actor: context.actor,
+            correlationId: context.correlationId,
+            payload: { providerKind, providerConfig }
+          },
+          () => {
+            this.db
+              .prepare(
+                `UPDATE projects SET
+                   provider_kind = ?, provider_config_json = ?, updated_at = datetime('now')
+                 WHERE id = ?`
+              )
+              .run(providerKind, JSON.stringify(providerConfig), projectId);
+          }
+        );
+        return this.get(projectId);
+      }
+    );
+  }
+
   get(projectId) {
     const project = decodeProject(
       this.db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId)

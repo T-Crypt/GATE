@@ -4,6 +4,14 @@ export function escapeHtml(value) {
   })[character]);
 }
 
+export function providerName(kind) {
+  return ({ claude: 'Claude Code', opencode: 'OpenCode' })[kind] || kind || 'Provider';
+}
+
+export function providerModelDefault(kind) {
+  return { claude: '', opencode: 'opencode/big-pickle' }[kind] || '';
+}
+
 export function emptyState(mark, title, description, action = '') {
   return `<div class="empty-state"><div><div class="empty-state-mark" aria-hidden="true">${escapeHtml(mark)}</div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p>${action ? `<div class="button-row empty-actions">${action}</div>` : ''}</div></div>`;
 }

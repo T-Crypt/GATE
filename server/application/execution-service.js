@@ -203,6 +203,7 @@ export class ExecutionService {
         nodeKey: node.key,
         cwd: worktree.path,
         prompt,
+        model: project.providerConfig.model,
         outputLimitBytes: this.outputLimitBytes,
         permissionMode: project.providerConfig.permissionMode || 'acceptEdits'
       },
@@ -214,14 +215,14 @@ export class ExecutionService {
     this.db
       .prepare("UPDATE runs SET provider_session_id = ?, status = 'running' WHERE id = ?")
       .run(session.sessionId, runId);
-    this.liveRuns.set(runId, { session, projectId, nodeId, worktree });
+    this.liveRuns.set(runId, { session, projectId, nodeId, worktree, providerKind: project.providerKind });
     session.completion
       .then((result) => this.#finish(runId, result))
       .catch((error) => this.#finish(runId, { exitCode: 1, error }));
     return this.get(runId);
   }
 
-  async draftTimeline(projectId, goal, context) {
+  async draftTimeline(projectId, goal, context, modelOverride) {
     const project = this.projects.get(projectId);
     const provider = this.providers.get(project.providerKind);
     if (!provider?.draftTimeline) {
@@ -234,7 +235,8 @@ export class ExecutionService {
       await provider.draftTimeline({
         goal: String(goal ?? '').trim(),
         repositoryContext: buildRepositoryContext(project, digest),
-        cwd: project.repoPath
+        cwd: project.repoPath,
+        model: modelOverride || project.providerConfig.model
       })
     );
     return runIdempotent(
@@ -392,7 +394,7 @@ export class ExecutionService {
     this.events.append({
       projectId: live.projectId,
       type: `agent.run.${status}`,
-      actor: { type: 'provider', id: 'claude' },
+      actor: { type: 'provider', id: live.providerKind || 'claude' },
       correlationId: runId,
       payload: { runId, nodeId: live.nodeId, status, headSha }
     });

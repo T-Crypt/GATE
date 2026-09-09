@@ -130,3 +130,72 @@ test('policy updates cannot remove the base branch from protection', () => {
     repository.close();
   }
 });
+
+test('provider updates persist providerKind and config with an event', () => {
+  const repository = createRepository();
+  const { db, close } = createTestDatabase();
+  const events = new EventStore(db);
+  const projects = new ProjectService(db, events);
+
+  try {
+    const project = projects.create(
+      { name: 'Workbench', repoPath: repository.repoPath, baseBranch: 'main' },
+      context('create-for-provider')
+    );
+    const updated = projects.updateProvider(
+      project.id,
+      { providerKind: 'opencode', providerConfig: { model: 'opencode/big-pickle' } },
+      context('provider-update')
+    );
+
+    assert.equal(updated.providerKind, 'opencode');
+    assert.deepEqual(updated.providerConfig, { model: 'opencode/big-pickle' });
+    assert.equal(events.readAfter(project.id, 0, 20).at(-1).type, 'project.provider.updated');
+  } finally {
+    close();
+    repository.close();
+  }
+});
+
+test('provider updates merge config instead of replacing it wholesale', () => {
+  const repository = createRepository();
+  const { db, close } = createTestDatabase();
+  const projects = new ProjectService(db, new EventStore(db));
+
+  try {
+    const project = projects.create(
+      { name: 'Workbench', repoPath: repository.repoPath, baseBranch: 'main', providerConfig: { permissionMode: 'deny' } },
+      context('create-with-config')
+    );
+    const updated = projects.updateProvider(
+      project.id,
+      { providerConfig: { model: 'opencode/big-pickle' } },
+      context('provider-merge')
+    );
+
+    assert.deepEqual(updated.providerConfig, { permissionMode: 'deny', model: 'opencode/big-pickle' });
+  } finally {
+    close();
+    repository.close();
+  }
+});
+
+test('provider updates reject non-object config', () => {
+  const repository = createRepository();
+  const { db, close } = createTestDatabase();
+  const projects = new ProjectService(db, new EventStore(db));
+
+  try {
+    const project = projects.create(
+      { name: 'Workbench', repoPath: repository.repoPath, baseBranch: 'main' },
+      context('create-config-invalid')
+    );
+    assert.throws(
+      () => projects.updateProvider(project.id, { providerConfig: 'nope' }, context('provider-bad-config')),
+      (error) => error.code === 'VALIDATION_FAILED'
+    );
+  } finally {
+    close();
+    repository.close();
+  }
+});

@@ -1,5 +1,6 @@
 import { GitAdapter } from './adapters/git.js';
 import { ClaudeProvider } from './adapters/providers/claude.js';
+import { OpenCodeProvider } from './adapters/providers/opencode.js';
 import { DashboardService } from './application/dashboard-service.js';
 import { EventStore } from './application/event-store.js';
 import { ExecutionService } from './application/execution-service.js';
@@ -18,6 +19,12 @@ export function buildServices({ db, config, providers }) {
       [
         'claude',
         new ClaudeProvider({
+          outputLimitBytes: config.outputLimitBytes
+        })
+      ],
+      [
+        'opencode',
+        new OpenCodeProvider({
           outputLimitBytes: config.outputLimitBytes
         })
       ]

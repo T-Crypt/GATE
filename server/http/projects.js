@@ -29,6 +29,13 @@ const policyInput = projectInput
   })
   .partial();
 
+const providerInput = z
+  .object({
+    providerKind: z.string().trim().min(1).max(80).optional(),
+    providerConfig: z.record(z.string(), z.unknown()).optional()
+  })
+  .refine((value) => value.providerKind !== undefined || value.providerConfig !== undefined);
+
 export function projectsRouter(projects) {
   const router = Router();
   router.get('/projects', (_req, res) => data(res, projects.list()));
@@ -41,6 +48,14 @@ export function projectsRouter(projects) {
     const project = projects.updatePolicy(
       Number(req.params.projectId),
       policyInput.parse(req.body),
+      commandContext(req)
+    );
+    return data(res, project);
+  });
+  router.patch('/projects/:projectId/provider', requireIdempotency, (req, res) => {
+    const project = projects.updateProvider(
+      Number(req.params.projectId),
+      providerInput.parse(req.body),
       commandContext(req)
     );
     return data(res, project);

@@ -1,4 +1,4 @@
-import { emptyState, escapeHtml, showToast } from './components.js';
+import { emptyState, escapeHtml, providerModelDefault, providerName, showToast } from './components.js';
 
 const passedStatuses = new Set(['complete', 'approved']);
 
@@ -72,6 +72,21 @@ function renderMileRail(milestones, gating) {
   }).join('')}</div>`;
 }
 
+const DEFAULT_MODEL = 'opencode/big-pickle';
+
+function modelOptions(project) {
+  const configured = project.providerConfig?.model;
+  const options = [['', 'Provider default']];
+  if (configured) options.push([configured, `Configured (${configured})`]);
+  if (project.providerKind === 'opencode' && !options.some(([value]) => value === DEFAULT_MODEL)) {
+    options.push([DEFAULT_MODEL, `Big Pickle (${DEFAULT_MODEL})`]);
+  }
+  const selected = configured || (project.providerKind === 'opencode' ? DEFAULT_MODEL : '');
+  return options
+    .map(([value, label]) => `<option value="${escapeHtml(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(label)}</option>`)
+    .join('');
+}
+
 function runnable(node, timeline) {
   if (!['planned', 'ready', 'blocked'].includes(node.status)) return false;
   const dependencies = timeline.edges
@@ -135,8 +150,8 @@ export async function initTimeline(container, { project, api, onRunChanged }) {
     const gating = computeMilestoneGating(milestones, timeline.nodes, timeline.edges);
     container.innerHTML = `
       <section class="goal-panel panel">
-        <div><p class="eyebrow">Claude planning</p><h2>Turn a goal into guided execution</h2><p>Claude proposes milestones, dependencies, and gates. Nothing runs until the draft is accepted.</p></div>
-        <form id="goalForm" class="goal-form"><label class="sr-only" for="goalInput">Project goal</label><textarea id="goalInput" rows="2" placeholder="Describe the outcome, constraints, and review expectations…" required minlength="3"></textarea><button class="button primary" type="submit">Draft timeline</button></form>
+        <div><p class="eyebrow">${escapeHtml(providerName(project.providerKind))} planning</p><h2>Turn a goal into guided execution</h2><p>${escapeHtml(providerName(project.providerKind))} proposes milestones, dependencies, and gates. Nothing runs until the draft is accepted.</p></div>
+        <form id="goalForm" class="goal-form"><label class="sr-only" for="goalInput">Project goal</label><textarea id="goalInput" rows="2" placeholder="Describe the outcome, constraints, and review expectations…" required minlength="3"></textarea><div class="goal-options"><div class="field"><label for="draftModel">Draft model</label><select id="draftModel">${modelOptions(project)}</select></div></div><button class="button primary" type="submit">Draft timeline</button></form>
         <div id="draftResult"></div>
       </section>
       <section class="timeline-toolbar">
@@ -152,7 +167,7 @@ export async function initTimeline(container, { project, api, onRunChanged }) {
           const steps = timeline.nodes.filter((node) => node.parentId === milestone.id);
           const aggregate = aggregateMilestoneStatus(steps);
           return `<section class="milestone-lane ${milestoneColorClass(milestone.key)}" data-node-id="${escapeHtml(milestone.id)}"><header><span class="milestone-key">${escapeHtml(milestone.key)}</span><div><h2>${escapeHtml(milestone.title)}</h2><p>${escapeHtml(milestone.description || `${steps.length} guided steps`)}</p>${info.locked ? `<p class="mile-gated-tag">Gated by ${escapeHtml(info.gatingKeys.join(', '))}</p>` : ''}</div><span class="badge"><span class="status-dot ${escapeHtml(aggregate.tone)}"></span>${escapeHtml(aggregate.label)}</span></header><div class="milestone-steps">${steps.map((step) => renderStep(step, timeline)).join('')}</div></section>`;
-        }).join('')}</div></div>` : emptyState('TL', 'No timeline yet', 'Describe the outcome above. Claude can propose a dependency-aware plan for review.')}
+        }).join('')}</div></div>` : emptyState('TL', 'No timeline yet', `Describe the outcome above. ${providerName(project.providerKind)} can propose a dependency-aware plan for review.`)}
       </section>`;
 
     const redraw = () => drawConnections(container, timeline);
@@ -172,10 +187,11 @@ export async function initTimeline(container, { project, api, onRunChanged }) {
       event.preventDefault();
       const button = event.currentTarget.querySelector('button');
       const goal = event.currentTarget.querySelector('textarea').value.trim();
+      const model = event.currentTarget.querySelector('#draftModel')?.value || undefined;
       button.disabled = true;
       button.textContent = 'Drafting…';
       try {
-        const draft = await api.draftTimeline(project.id, goal);
+        const draft = await api.draftTimeline(project.id, goal, model);
         const result = container.querySelector('#draftResult');
         result.innerHTML = `<div class="draft-review"><div><strong>Proposed timeline</strong><span>${draft.graph.nodes.length} nodes · ${draft.graph.edges.length} dependencies</span></div><button class="button primary" id="acceptDraft">Accept draft</button></div>`;
         result.querySelector('#acceptDraft').addEventListener('click', async () => {
@@ -194,7 +210,7 @@ export async function initTimeline(container, { project, api, onRunChanged }) {
       button.disabled = true;
       try {
         await api.startStep(project.id, button.dataset.runNode);
-        showToast('Claude run started');
+        showToast(`${providerName(project.providerKind)} run started`);
         await onRunChanged?.();
         await initTimeline(container, { project, api, onRunChanged });
       } catch (error) {
