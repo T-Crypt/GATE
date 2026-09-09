@@ -5,6 +5,7 @@ import { OpenCodeProvider } from './adapters/providers/opencode.js';
 import { DashboardService } from './application/dashboard-service.js';
 import { EventStore } from './application/event-store.js';
 import { ExecutionService } from './application/execution-service.js';
+import { InstructionService } from './application/instruction-service.js';
 import { ProjectService } from './application/project-service.js';
 import { RemoteService } from './application/remote-service.js';
 import { RepoMirrorService } from './application/repo-mirror.js';
@@ -49,10 +50,12 @@ export function buildServices({ db, config, providers }) {
     outputLimitBytes: config.outputLimitBytes
   });
 
+  const instructions = new InstructionService({ db, projects, eventStore: events });
   return {
     db,
     events,
     projects,
+    instructions,
     timeline,
     execution,
     reviews: new ReviewService(db, events),

@@ -16,6 +16,7 @@ const projectInput = z.object({
   protectedBranches: z.array(z.string().trim().min(1).max(250)).max(50).default([]),
   branchPrefix: z.string().trim().max(250).default('work/gate-'),
   interactionLevel: z.enum(['observe', 'assist', 'automatic', 'custom']).default('assist'),
+  stage: z.enum(['greenfield', 'active', 'maintenance']).default('active'),
   providerKind: z.string().trim().min(1).max(80).default('claude'),
   providerConfig: z.record(z.string(), z.unknown()).default({})
 });
@@ -38,7 +39,15 @@ const providerInput = z
   })
   .refine((value) => value.providerKind !== undefined || value.providerConfig !== undefined);
 
-export function projectsRouter(projects) {
+const stageInput = z.object({
+  stage: z.enum(['greenfield', 'active', 'maintenance'])
+});
+
+const instructionInput = z.object({
+  userContent: z.string().max(100_000)
+});
+
+export function projectsRouter(projects, instructions) {
   const router = Router();
   router.get('/projects', (_req, res) => data(res, projects.list()));
   router.get('/projects/:projectId', (req, res) => data(res, projects.get(Number(req.params.projectId))));
@@ -70,5 +79,31 @@ export function projectsRouter(projects) {
     );
     return data(res, project);
   });
+  router.patch('/projects/:projectId/stage', requireIdempotency, (req, res) => {
+    const project = projects.updateStage(
+      Number(req.params.projectId),
+      stageInput.parse(req.body),
+      commandContext(req)
+    );
+    return data(res, project);
+  });
+  if (instructions) {
+    router.get('/projects/:projectId/instructions', (req, res) =>
+      data(res, instructions.list(Number(req.params.projectId)))
+    );
+    router.get('/projects/:projectId/instructions/:fileName', (req, res) =>
+      data(res, instructions.get(Number(req.params.projectId), req.params.fileName))
+    );
+    router.put('/projects/:projectId/instructions/:fileName', requireIdempotency, (req, res) =>
+      data(
+        res,
+        instructions.update(
+          Number(req.params.projectId),
+          { fileName: req.params.fileName, ...instructionInput.parse(req.body) },
+          commandContext(req)
+        )
+      )
+    );
+  }
   return router;
 }

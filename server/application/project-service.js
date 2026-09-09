@@ -68,6 +68,7 @@ function decodeProject(row) {
     interactionLevel: row.interaction_level,
     providerKind: row.provider_kind,
     providerConfig: JSON.parse(row.provider_config_json),
+    stage: row.stage || 'active',
     lastSequence: row.last_sequence,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -114,8 +115,8 @@ export class ProjectService {
           `INSERT INTO projects(
              name, repo_path, base_branch, production_branch, stable_branch,
              protected_branches_json, branch_prefix, interaction_level, provider_kind, provider_config_json,
-             updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+             stage, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
         )
         .run(
           name,
@@ -127,7 +128,8 @@ export class ProjectService {
           prefix,
           input.interactionLevel || 'assist',
           input.providerKind || 'claude',
-          JSON.stringify(input.providerConfig || {})
+          JSON.stringify(input.providerConfig || {}),
+          stage(input.stage)
         );
       const projectId = Number(row.lastInsertRowid);
       this.events.append({
@@ -135,7 +137,7 @@ export class ProjectService {
         type: 'project.created',
         actor: context.actor,
         correlationId: context.correlationId,
-        payload: { name, repoPath, ...policy, branchPrefix: prefix }
+        payload: { name, repoPath, ...policy, branchPrefix: prefix, stage: stage(input.stage) }
       });
       return this.get(projectId);
     });
@@ -237,6 +239,33 @@ export class ProjectService {
     );
   }
 
+  updateStage(projectId, input, context) {
+    return runIdempotent(
+      this.db,
+      context,
+      { command: 'project.updateStage', projectId, input },
+      () => {
+        const current = this.get(projectId);
+        const nextStage = stage(input.stage);
+        this.events.append(
+          {
+            projectId,
+            type: 'project.stage.updated',
+            actor: context.actor,
+            correlationId: context.correlationId,
+            payload: { previousStage: current.stage, stage: nextStage }
+          },
+          () => {
+            this.db
+              .prepare("UPDATE projects SET stage = ?, updated_at = datetime('now') WHERE id = ?")
+              .run(nextStage, projectId);
+          }
+        );
+        return this.get(projectId);
+      }
+    );
+  }
+
   get(projectId) {
     const project = decodeProject(
       this.db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId)
@@ -248,4 +277,14 @@ export class ProjectService {
   list() {
     return this.db.prepare('SELECT * FROM projects ORDER BY id DESC').all().map(decodeProject);
   }
+}
+
+const PROJECT_STAGES = new Set(['greenfield', 'active', 'maintenance']);
+
+function stage(value, field = 'stage') {
+  const normalized = text(value ?? 'active', field).toLowerCase();
+  if (!PROJECT_STAGES.has(normalized)) {
+    throw validation(`${field} must be greenfield, active, or maintenance`, { field });
+  }
+  return normalized;
 }

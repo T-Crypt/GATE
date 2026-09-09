@@ -4,6 +4,7 @@ import request from 'supertest';
 
 import { createApp } from '../../server/app.js';
 import { EventStore } from '../../server/application/event-store.js';
+import { InstructionService } from '../../server/application/instruction-service.js';
 import { ProjectService } from '../../server/application/project-service.js';
 import { TimelineService } from '../../server/application/timeline-service.js';
 import { createTestDatabase } from '../helpers/database.js';
@@ -14,9 +15,11 @@ function setup() {
   const events = new EventStore(database.db);
   const projects = new ProjectService(database.db, events);
   const timeline = new TimelineService(database.db, events);
+  const instructions = new InstructionService({ db: database.db, projects, eventStore: events });
   const services = {
     events,
     projects,
+    instructions,
     timeline,
     execution: {
       list: () => [],
@@ -97,6 +100,40 @@ test('project creation accepts empty optional branch fields from an unfilled for
     assert.equal(response.status, 201);
     assert.equal(response.body.data.stableBranch, null);
     assert.equal(response.body.data.productionBranch, null);
+  } finally {
+    fixture.close();
+    gitFixture.close();
+  }
+});
+
+test('project stage and managed instructions are available through guarded project routes', async () => {
+  const gitFixture = createGitFixture();
+  const fixture = setup();
+  try {
+    const created = await request(fixture.app)
+      .post('/api/v1/projects')
+      .set('Idempotency-Key', 'create-stage-project')
+      .send({ name: 'Workbench', repoPath: gitFixture.repoPath, baseBranch: 'main' });
+    const projectId = created.body.data.id;
+
+    const updated = await request(fixture.app)
+      .patch(`/api/v1/projects/${projectId}/stage`)
+      .set('Idempotency-Key', 'set-maintenance')
+      .send({ stage: 'maintenance' });
+    assert.equal(updated.status, 200);
+    assert.equal(updated.body.data.stage, 'maintenance');
+
+    const missing = await request(fixture.app).get(`/api/v1/projects/${projectId}/instructions/AGENTS.md`);
+    assert.equal(missing.status, 200);
+    assert.equal(missing.body.data.status, 'missing');
+
+    const saved = await request(fixture.app)
+      .put(`/api/v1/projects/${projectId}/instructions/AGENTS.md`)
+      .set('Idempotency-Key', 'save-instructions')
+      .send({ userContent: '# Project rules\n\nKeep changes test-backed.' });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.data.status, 'valid');
+    assert.match(saved.body.data.content, /GATE:MANAGED:START/);
   } finally {
     fixture.close();
     gitFixture.close();
