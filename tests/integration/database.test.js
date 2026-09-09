@@ -32,7 +32,7 @@ test('migrations create an immutable ordered event store', () => {
     ]);
     assert.equal(
       db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version,
-      9
+      10
     );
     assert.ok(
       db.prepare('PRAGMA table_info(memory_nodes)').all().some((column) => column.name === 'source_path')
@@ -43,6 +43,8 @@ test('migrations create an immutable ordered event store', () => {
     assert.ok(
       db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'context_capsules'").get()
     );
+    assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'features'").get());
+    assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'planning_requests'").get());
   } finally {
     close();
   }
