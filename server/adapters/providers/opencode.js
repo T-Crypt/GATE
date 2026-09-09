@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { AppError } from '../../domain/errors.js';
 import { ProcessRunner } from './process-runner.js';
+import { buildTimelinePrompt } from './timeline-contract.js';
 
 export const DEFAULT_MODEL = 'opencode/big-pickle';
 
@@ -102,7 +103,36 @@ export class OpenCodeProvider {
   }
 
   capabilities() {
-    return { streaming: true, resume: false, structuredDrafts: true };
+    return { streaming: true, resume: false, structuredDrafts: true, modelDiscovery: true };
+  }
+
+  // `opencode models` prints the ids this install can actually reach, one per
+  // line. Read them rather than hardcoding a list that drifts.
+  async listModels() {
+    const chunks = [];
+    let result;
+    try {
+      const running = await this.runner.start(
+        {
+          executable: this.executable,
+          args: ['models'],
+          env: process.env,
+          outputLimitBytes: 256_000
+        },
+        { onOutput: (chunk, stream) => (stream === 'stdout' ? chunks.push(chunk) : null) }
+      );
+      result = await running.completion;
+    } catch {
+      return { authenticated: false, models: [] };
+    }
+    if (result.exitCode !== 0) return { authenticated: false, models: [] };
+    const models = chunks
+      .join('')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !line.includes(' '))
+      .map((id) => ({ id, label: id === DEFAULT_MODEL ? `${id} — default` : id }));
+    return { authenticated: models.length > 0, models };
   }
 
   async start(request, observer) {
@@ -141,11 +171,8 @@ export class OpenCodeProvider {
 
   async draftTimeline({ goal, repositoryContext, cwd, model, env }) {
     const prompt = [
-      'Create a concise implementation timeline for the following local repository goal.',
-      'Return milestones and executable steps. Add code, test, visual, or approval gates where evidence is required.',
-      `Goal: ${goal}`,
-      `Repository context: ${repositoryContext || 'No additional context supplied.'}`,
-      'Reply with a single JSON object of the form {"nodes": [...], "edges": [...], "gates": [...]} and nothing else.'
+      buildTimelinePrompt({ goal, repositoryContext }),
+      'Reply with that JSON object and nothing else. No prose, no markdown fences.'
     ].join('\n\n');
     const parts = [];
     const lineReader = this.#lineReader((event) => {

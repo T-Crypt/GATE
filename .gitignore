@@ -37,7 +37,8 @@ site/.jekyll-cache/
 # Gate local project state (not shared by default)
 .gate/
 
-# graphify-out/ is committed for team contributions (knowledge graph).
-# Only exclude local cost tracking.
-graphify-out/cost.json
+# Local zvec-grep index (local retrieval tool, not shared)
 .zvec-grep/
+
+# Local agent orientation for working on Gate's own source (Claude Code)
+CLAUDE.md

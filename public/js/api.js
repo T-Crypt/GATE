@@ -38,6 +38,7 @@ export const api = {
   inspectRepo: (input) => request('/projects/inspect', { method: 'POST', body: input }),
   updatePolicy: (projectId, input) => request(`/projects/${projectId}/policy`, { method: 'PATCH', body: input }),
   updateProvider: (projectId, input) => request(`/projects/${projectId}/provider`, { method: 'PATCH', body: input }),
+  listProviderModels: (kind) => request(`/providers/${encodeURIComponent(kind)}/models`),
   updateStage: (projectId, input) => request(`/projects/${projectId}/stage`, { method: 'PATCH', body: input }),
   listInstructions: (projectId) => request(`/projects/${projectId}/instructions`),
   getInstruction: (projectId, fileName) => request(`/projects/${projectId}/instructions/${encodeURIComponent(fileName)}`),

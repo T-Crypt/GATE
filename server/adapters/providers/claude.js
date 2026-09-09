@@ -2,17 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { AppError } from '../../domain/errors.js';
 import { ProcessRunner } from './process-runner.js';
-
-const timelineSchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['nodes', 'edges', 'gates'],
-  properties: {
-    nodes: { type: 'array', items: { type: 'object' } },
-    edges: { type: 'array', items: { type: 'object' } },
-    gates: { type: 'array', items: { type: 'object' } }
-  }
-};
+import { buildTimelinePrompt, timelineSchema } from './timeline-contract.js';
 
 function isEmptyObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0;
@@ -48,6 +38,22 @@ function parseStructuredOutput(output) {
   return value;
 }
 
+// A non-zero exit still usually carries the CLI's own JSON envelope or a plain
+// stderr line. Surface whichever is there instead of a generic failure.
+function providerFailureMessage(output, result) {
+  const text = String(output || '').trim();
+  if (text) {
+    try {
+      const envelope = JSON.parse(text);
+      if (envelope.result) return String(envelope.result);
+    } catch {
+      const line = text.split('\n').filter(Boolean).at(-1);
+      if (line) return `Claude timeline drafting failed: ${line.slice(0, 500)}`;
+    }
+  }
+  return `Claude timeline drafting failed (exit ${result.exitCode ?? 'unknown'})`;
+}
+
 export class ClaudeProvider {
   constructor({ executable = 'claude', runner = new ProcessRunner(), outputLimitBytes = 2_000_000 } = {}) {
     this.executable = executable;
@@ -56,7 +62,44 @@ export class ClaudeProvider {
   }
 
   capabilities() {
-    return { streaming: true, resume: false, structuredDrafts: true };
+    return { streaming: true, resume: false, structuredDrafts: true, modelDiscovery: true };
+  }
+
+  // The CLI has no machine-readable model list, but it does resolve these
+  // aliases against whatever account `claude auth` is signed in as — an alias
+  // the subscription cannot reach fails the same way a typo does. Offering the
+  // aliases rather than pinned ids keeps Gate correct as models are released.
+  async listModels() {
+    const status = await this.#authStatus();
+    return {
+      authenticated: status.authenticated,
+      models: [
+        { id: 'opus', label: 'Opus — most capable' },
+        { id: 'sonnet', label: 'Sonnet — balanced' },
+        { id: 'haiku', label: 'Haiku — fastest' }
+      ]
+    };
+  }
+
+  async #authStatus() {
+    const chunks = [];
+    try {
+      const running = await this.runner.start(
+        {
+          executable: this.executable,
+          args: ['auth', 'status'],
+          env: process.env,
+          outputLimitBytes: 64_000
+        },
+        { onOutput: (chunk) => chunks.push(chunk) }
+      );
+      const result = await running.completion;
+      return { authenticated: result.exitCode === 0, detail: chunks.join('').trim() };
+    } catch {
+      // A missing executable is a configuration problem, not a fatal one: the
+      // caller still gets the alias list and a clear "not authenticated".
+      return { authenticated: false, detail: `${this.executable} is not available on PATH` };
+    }
   }
 
   async start(request, observer) {
@@ -88,12 +131,7 @@ export class ClaudeProvider {
 
   async draftTimeline({ goal, repositoryContext, cwd, model, env }) {
     const chunks = [];
-    const prompt = [
-      'Create a concise implementation timeline for the following local repository goal.',
-      'Return milestones and executable steps. Add code, test, visual, or approval gates where evidence is required.',
-      `Goal: ${goal}`,
-      `Repository context: ${repositoryContext || 'No additional context supplied.'}`
-    ].join('\n\n');
+    const prompt = buildTimelinePrompt({ goal, repositoryContext });
     const running = await this.runner.start(
       {
         executable: this.executable,
@@ -122,9 +160,15 @@ export class ClaudeProvider {
       { onOutput: (chunk) => chunks.push(chunk) }
     );
     const result = await running.completion;
+    const output = chunks.join('');
     if (result.exitCode !== 0) {
-      throw new AppError('PROVIDER_FAILED', 'Claude timeline drafting failed', { status: 502 });
+      // The CLI explains itself — an unreachable model, an expired login, a bad
+      // flag. Throwing that away leaves a 502 that cannot be acted on.
+      throw new AppError('PROVIDER_FAILED', providerFailureMessage(output, result), {
+        status: 502,
+        details: { exitCode: result.exitCode, signal: result.signal }
+      });
     }
-    return parseStructuredOutput(chunks.join(''));
+    return parseStructuredOutput(output);
   }
 }

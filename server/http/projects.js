@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 
 import { commandContext, data, requireIdempotency } from './middleware.js';
+import { AppError } from '../domain/errors.js';
 
 const branch = z.preprocess(
   (value) => (value === '' ? undefined : value),
@@ -47,7 +48,7 @@ const instructionInput = z.object({
   userContent: z.string().max(100_000)
 });
 
-export function projectsRouter(projects, instructions) {
+export function projectsRouter(projects, instructions, providerMap) {
   const router = Router();
   router.get('/projects', (_req, res) => data(res, projects.list()));
   router.get('/projects/:projectId', (req, res) => data(res, projects.get(Number(req.params.projectId))));
@@ -71,12 +72,29 @@ export function projectsRouter(projects, instructions) {
     );
     return data(res, project);
   });
-  router.patch('/projects/:projectId/provider', requireIdempotency, (req, res) => {
-    const project = projects.updateProvider(
-      Number(req.params.projectId),
-      providerInput.parse(req.body),
-      commandContext(req)
-    );
+  router.get('/providers/:kind/models', async (req, res) => {
+    const provider = providerMap?.get(req.params.kind);
+    if (!provider) throw new AppError('UNKNOWN_PROVIDER', `No provider named ${req.params.kind}`, { status: 404 });
+    if (!provider.listModels) return data(res, { kind: req.params.kind, authenticated: false, models: [] });
+    return data(res, { kind: req.params.kind, ...(await provider.listModels()) });
+  });
+  router.patch('/projects/:projectId/provider', requireIdempotency, async (req, res) => {
+    const input = providerInput.parse(req.body);
+    // A model the harness cannot reach fails at draft time, ~30s in, with a
+    // 502 the user cannot act on. Reject it here instead.
+    const model = input.providerConfig?.model;
+    if (model) {
+      const kind = input.providerKind ?? projects.get(Number(req.params.projectId)).providerKind;
+      const provider = providerMap?.get(kind);
+      const known = provider?.listModels ? (await provider.listModels()).models : [];
+      if (known.length && !known.some((candidate) => candidate.id === model)) {
+        throw new AppError('UNKNOWN_MODEL', `${kind} cannot reach the model "${model}"`, {
+          status: 422,
+          details: { model, available: known.map((candidate) => candidate.id) }
+        });
+      }
+    }
+    const project = projects.updateProvider(Number(req.params.projectId), input, commandContext(req));
     return data(res, project);
   });
   router.patch('/projects/:projectId/stage', requireIdempotency, (req, res) => {

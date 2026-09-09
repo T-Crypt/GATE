@@ -59,7 +59,7 @@ export function createApp({ services, config, logger, routes = true }) {
   });
 
   if (routes) {
-    app.use('/api/v1', projectsRouter(services.projects, services.instructions));
+    app.use('/api/v1', projectsRouter(services.projects, services.instructions, services.providers));
     if (services.memory) app.use('/api/v1', memoryRouter(services.memory, services.contexts));
     if (services.features && services.planner) app.use('/api/v1', featuresRouter(services.features, services.planner));
     app.use('/api/v1', timelineRouter(services.timeline, services.execution));
