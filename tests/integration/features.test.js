@@ -36,7 +36,9 @@ test('feature lifecycle rejects skipped and terminal transitions', () => {
   try {
     const feature = fixture.features.create(1, { title: 'Planner', intent: 'Ground plans in Memory.' }, command('create'));
     assert.throws(() => fixture.features.transition(1, feature.id, 'complete', command('skip')), (error) => error.code === 'INVALID_FEATURE_TRANSITION');
-    assert.equal(fixture.features.transition(1, feature.id, 'planning', command('planning')).status, 'planning');
+    const planning = fixture.features.transition(1, feature.id, 'planning', command('planning'));
+    assert.equal(planning.status, 'planning');
+    assert.deepEqual(fixture.features.transition(1, feature.id, 'planning', command('planning')), planning);
     assert.equal(fixture.features.transition(1, feature.id, 'cancelled', command('cancel')).status, 'cancelled');
     assert.throws(() => fixture.features.transition(1, feature.id, 'planning', command('revive')), (error) => error.code === 'INVALID_FEATURE_TRANSITION');
   } finally { fixture.close(); }

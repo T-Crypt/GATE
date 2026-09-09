@@ -58,13 +58,13 @@ export class FeatureService {
   }
 
   transition(projectId, featureId, status, context) {
-    const feature = this.get(projectId, featureId);
     const target = String(status ?? '').trim();
     if (!TRANSITIONS[target]) throw validation('Unknown feature status', { field: 'status' });
-    if (!TRANSITIONS[feature.status].has(target)) {
-      throw new AppError('INVALID_FEATURE_TRANSITION', `Feature cannot move from ${feature.status} to ${target}`, { status: 409 });
-    }
     return runIdempotent(this.db, context, { command: 'feature.transition', projectId, featureId, status: target }, () => {
+      const feature = this.get(projectId, featureId);
+      if (!TRANSITIONS[feature.status].has(target)) {
+        throw new AppError('INVALID_FEATURE_TRANSITION', `Feature cannot move from ${feature.status} to ${target}`, { status: 409 });
+      }
       this.events.append({ projectId, type: 'feature.status.updated', actor: context.actor, correlationId: context.correlationId, payload: { featureId, from: feature.status, to: target } }, () => {
         this.db.prepare("UPDATE features SET status = ?, updated_at = datetime('now') WHERE project_id = ? AND id = ?").run(target, projectId, featureId);
       });

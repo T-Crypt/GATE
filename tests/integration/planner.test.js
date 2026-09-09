@@ -49,8 +49,11 @@ test('feature planning persists grounded impact and remains proposed until accep
     const feature = fixture.features.create(fixture.project.id, { title: 'Cancellation', intent: 'Change cancelProvider behavior safely.' }, command('feature'));
     await fixture.memory.refresh(fixture.project.id, { force: true }, command('refresh'));
     const request = await fixture.planner.plan(fixture.project.id, { sourceType: 'feature', sourceId: feature.id }, command('plan'));
+    const repeated = await fixture.planner.plan(fixture.project.id, { sourceType: 'feature', sourceId: feature.id }, command('plan'));
 
     assert.equal(request.status, 'proposed');
+    assert.deepEqual(repeated, request);
+    assert.equal(fixture.provider.draftRequests.length, 1);
     assert.equal(fixture.timeline.get(fixture.project.id).nodes.length, 0);
     assert.equal(fixture.features.get(fixture.project.id, feature.id).status, 'planning');
     assert.ok(request.impact.directMatches.some((node) => node.name === 'cancelProvider'));
@@ -58,7 +61,9 @@ test('feature planning persists grounded impact and remains proposed until accep
     assert.match(fixture.provider.draftRequests[0].repositoryContext, /cancelProvider/);
 
     const accepted = fixture.planner.accept(fixture.project.id, request.id, command('accept'));
+    const repeatedAcceptance = fixture.planner.accept(fixture.project.id, request.id, command('accept'));
     assert.equal(accepted.status, 'accepted');
+    assert.deepEqual(repeatedAcceptance, accepted);
     assert.equal(fixture.features.get(fixture.project.id, feature.id).status, 'approved');
     assert.equal(accepted.nodes.length, 2);
     assert.equal(fixture.timeline.get(fixture.project.id).nodes.length, 2);

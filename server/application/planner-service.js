@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { runIdempotent } from './idempotency.js';
+import { readIdempotent, runIdempotent } from './idempotency.js';
 import { normalizeTimelineGraph } from './timeline-service.js';
 import { AppError, notFound, validation } from '../domain/errors.js';
 
@@ -48,6 +48,9 @@ export class PlannerService {
     this.projects.get(projectId);
     const sourceType = String(input.sourceType || 'feature');
     const source = this.#source(projectId, sourceType, input.sourceId);
+    const requestCommand = { command: 'planning.propose', projectId, sourceType, sourceId: source.id };
+    const replay = readIdempotent(this.db, context, requestCommand);
+    if (replay.found) return replay.result;
     const existing = this.db.prepare("SELECT id FROM planning_requests WHERE project_id = ? AND source_type = ? AND source_id = ? AND status = 'proposed'").get(projectId, sourceType, source.id);
     if (existing) throw new AppError('PLANNING_ALREADY_PROPOSED', 'This source already has a proposed plan', { status: 409, details: { planningRequestId: existing.id } });
     const impact = this.memory.impact(projectId, { query: source.goal, limit: 25 });
@@ -59,7 +62,7 @@ export class PlannerService {
     });
     const producedNodeIds = draft.graph.nodes.filter((node) => !currentIds.has(node.id)).map((node) => node.id);
     const provenance = { repositorySha: contextCapsule.repositorySha, memoryRevisionSha: contextCapsule.memoryRevisionSha, contextCapsuleId: contextCapsule.id, producedNodeIds };
-    return runIdempotent(this.db, context, { command: 'planning.propose', projectId, sourceType, sourceId: source.id }, () => {
+    return runIdempotent(this.db, context, requestCommand, () => {
       const id = randomUUID();
       this.events.append({ projectId, type: sourceType === 'milestone' ? 'milestone.expansion.proposed' : 'planning.proposed', actor: context.actor, correlationId: context.correlationId, payload: { planningRequestId: id, sourceType, sourceId: source.id, draftId: draft.id, risk: impact.risk } }, () => {
         this.db.prepare(`INSERT INTO planning_requests(id, project_id, source_type, source_id, goal, context_capsule_id, timeline_draft_id, impact_json, provenance_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, projectId, sourceType, source.id, source.goal, contextCapsule.id, draft.id, JSON.stringify(impact), JSON.stringify(provenance));
@@ -89,10 +92,15 @@ export class PlannerService {
     };
   }
 
+  list(projectId, sourceType, sourceId) {
+    this.projects.get(projectId);
+    return this.db.prepare('SELECT id FROM planning_requests WHERE project_id = ? AND source_type = ? AND source_id = ? ORDER BY created_at DESC, rowid DESC').all(projectId, sourceType, String(sourceId)).map((row) => this.get(projectId, row.id));
+  }
+
   accept(projectId, requestId, context) {
-    const request = this.get(projectId, requestId);
-    if (request.status !== 'proposed') throw new AppError('PLANNING_NOT_PROPOSED', 'Only proposed plans can be accepted', { status: 409 });
     return runIdempotent(this.db, context, { command: 'planning.accept', projectId, requestId }, () => {
+      const request = this.get(projectId, requestId);
+      if (request.status !== 'proposed') throw new AppError('PLANNING_NOT_PROPOSED', 'Only proposed plans can be accepted', { status: 409 });
       this.execution.acceptDraft(projectId, request.draft.id, nested(context, 'timeline'));
       this.events.append({ projectId, type: 'planning.accepted', actor: context.actor, correlationId: context.correlationId, payload: { planningRequestId: requestId, sourceType: request.sourceType, sourceId: request.sourceId } }, () => {
         this.db.prepare("UPDATE planning_requests SET status = 'accepted', accepted_at = datetime('now') WHERE id = ?").run(requestId);

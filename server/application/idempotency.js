@@ -19,7 +19,7 @@ function requestHash(request) {
   return crypto.createHash('sha256').update(JSON.stringify(stable(request))).digest('hex');
 }
 
-export function runIdempotent(db, context, request, operation) {
+export function readIdempotent(db, context, request) {
   if (!context?.actor?.id || !context?.idempotencyKey) {
     throw new AppError('IDEMPOTENCY_REQUIRED', 'Actor and idempotency key are required', {
       status: 400
@@ -27,27 +27,31 @@ export function runIdempotent(db, context, request, operation) {
   }
 
   const hash = requestHash(request);
-  return withTransaction(db, () => {
-    const existing = db
-      .prepare('SELECT request_hash, result_json FROM idempotency_keys WHERE actor_id = ? AND idempotency_key = ?')
-      .get(context.actor.id, context.idempotencyKey);
+  const existing = db
+    .prepare('SELECT request_hash, result_json FROM idempotency_keys WHERE actor_id = ? AND idempotency_key = ?')
+    .get(context.actor.id, context.idempotencyKey);
 
-    if (existing) {
-      if (existing.request_hash !== hash) {
-        throw new AppError(
-          'IDEMPOTENCY_CONFLICT',
-          'This idempotency key was already used for another command',
-          { status: 409 }
-        );
-      }
-      return JSON.parse(existing.result_json);
-    }
+  if (!existing) return { found: false };
+  if (existing.request_hash !== hash) {
+    throw new AppError(
+      'IDEMPOTENCY_CONFLICT',
+      'This idempotency key was already used for another command',
+      { status: 409 }
+    );
+  }
+  return { found: true, result: JSON.parse(existing.result_json) };
+}
+
+export function runIdempotent(db, context, request, operation) {
+  return withTransaction(db, () => {
+    const existing = readIdempotent(db, context, request);
+    if (existing.found) return existing.result;
 
     const result = operation();
     db.prepare(
       `INSERT INTO idempotency_keys(actor_id, idempotency_key, request_hash, result_json)
        VALUES (?, ?, ?, ?)`
-    ).run(context.actor.id, context.idempotencyKey, hash, JSON.stringify(result));
+    ).run(context.actor.id, context.idempotencyKey, requestHash(request), JSON.stringify(result));
     return result;
   });
 }
