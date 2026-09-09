@@ -336,6 +336,13 @@ input::placeholder,textarea::placeholder { color: var(--faint); }
 .memory-graph-controls label { display: inline-flex; align-items: center; gap: 6px; color: var(--text-soft); font-size: .82rem; }
 .memory-graph-controls select { width: auto; padding: 5px 24px 5px 8px; }
 .memory-edge-summary { margin: 10px 0; gap: 6px; }
+.context-compiler-form { display: grid; grid-template-columns: minmax(0,1fr) 140px 130px auto; align-items: end; gap: 12px; }
+.context-capsules { display: grid; gap: 8px; }
+.context-capsule { border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.context-capsule summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px; color: var(--text-soft); cursor: pointer; }
+.context-capsule summary > span:first-child { display: grid; gap: 4px; }
+.context-capsule summary small { color: var(--text-muted); font-size: 10px; }
+.context-capsule-body { padding: 0 11px 11px; }
 .review-card[data-state="stale"] { border-color: rgba(247,199,106,.3); }
 .review-card[data-state="fresh"] { border-color: rgba(111,231,173,.26); }
 .evidence-state { display: grid; gap: 3px; margin-bottom: 16px; padding: 11px; border: 1px solid var(--line); border-radius: 11px; background: rgba(255,255,255,.018); }
@@ -396,6 +403,7 @@ input::placeholder,textarea::placeholder { color: var(--faint); }
   .goal-panel { grid-template-columns: 1fr; }
   .goal-form { grid-template-columns: 1fr; }
   .timeline-toolbar { align-items: flex-start; flex-direction: column; }
+  .context-compiler-form { grid-template-columns: 1fr; }
   .review-grid,.settings-grid,.memory-grid,.dashboard-metrics,.summary-grid,.issues-board { grid-template-columns: 1fr; }
   .inline-form { grid-template-columns: 1fr; }
 }

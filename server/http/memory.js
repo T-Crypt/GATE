@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { commandContext, data, requireIdempotency } from './middleware.js';
 
-export function memoryRouter(memory) {
+export function memoryRouter(memory, contexts) {
   const router = Router();
   router.get('/projects/:projectId/memory/status', async (req, res, next) => {
     try {
@@ -32,6 +32,27 @@ export function memoryRouter(memory) {
     const query = z.object({ q: z.string().trim().min(1).max(500), limit: z.coerce.number().int().positive().max(25).optional() }).parse(req.query);
     return data(res, memory.impact(Number(req.params.projectId), { query: query.q, limit: query.limit }));
   });
+  if (contexts) {
+    router.get('/projects/:projectId/memory/context', (req, res) => {
+      const query = z.object({ limit: z.coerce.number().int().positive().max(100).optional() }).parse(req.query);
+      return data(res, contexts.list(Number(req.params.projectId), query.limit));
+    });
+    router.get('/projects/:projectId/memory/context/:capsuleId', (req, res) =>
+      data(res, contexts.get(Number(req.params.projectId), req.params.capsuleId))
+    );
+    router.post('/projects/:projectId/memory/context', requireIdempotency, async (req, res, next) => {
+      try {
+        const body = z.object({
+          goal: z.string().trim().min(3).max(20_000),
+          kind: z.enum(['context', 'planning', 'execution']).default('context'),
+          tokenBudget: z.number().int().min(512).max(32_000).default(4000)
+        }).parse(req.body);
+        return data(res, await contexts.compile(Number(req.params.projectId), body, commandContext(req)), 201);
+      } catch (error) {
+        return next(error);
+      }
+    });
+  }
   router.post('/projects/:projectId/memory/refresh', requireIdempotency, async (req, res, next) => {
     try {
       const body = z.object({ force: z.boolean().default(false) }).parse(req.body);

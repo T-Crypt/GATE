@@ -298,4 +298,22 @@ export function registerTools(server, services) {
       services.memory.refresh(id, { force }, actorContext(key))
     )
   );
+
+  server.registerTool(
+    'memory_context',
+    {
+      description: 'Compile and persist a token-budgeted context capsule grounded in current GATE Memory and project instructions.',
+      inputSchema: {
+        projectId,
+        goal: z.string().trim().min(3).max(20_000),
+        kind: z.enum(['context', 'planning', 'execution']).optional(),
+        tokenBudget: z.number().int().min(512).max(32_000).optional(),
+        idempotencyKey
+      },
+      annotations: { idempotentHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, idempotencyKey: key, ...input }) =>
+      services.contexts.compile(id, input, actorContext(key))
+    )
+  );
 }

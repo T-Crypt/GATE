@@ -6,6 +6,7 @@ import request from 'supertest';
 
 import { createApp } from '../../server/app.js';
 import { EventStore } from '../../server/application/event-store.js';
+import { ContextCompiler } from '../../server/application/context-compiler.js';
 import { InstructionService } from '../../server/application/instruction-service.js';
 import { ProjectService } from '../../server/application/project-service.js';
 import { MemoryService } from '../../server/application/memory-service.js';
@@ -22,11 +23,13 @@ function setup() {
   const memory = new MemoryService({ db: database.db, projects, gitAdapter: git, eventStore: events });
   const timeline = new TimelineService(database.db, events);
   const instructions = new InstructionService({ db: database.db, projects, eventStore: events });
+  const contexts = new ContextCompiler({ db: database.db, projects, memory, instructions, gitAdapter: git, eventStore: events });
   const services = {
     events,
     projects,
     instructions,
     memory,
+    contexts,
     timeline,
     execution: {
       list: () => [],
@@ -199,6 +202,25 @@ test('memory routes refresh and search the local file graph', async () => {
     assert.equal(impact.status, 200);
     assert.deepEqual(impact.body.data.dependents.map((item) => item.path), ['src/consumer.js']);
     assert.ok(impact.body.data.edges.some((edge) => edge.type === 'REFERENCES'));
+
+    const compiled = await request(fixture.app)
+      .post(`/api/v1/projects/${projectId}/memory/context`)
+      .set('Idempotency-Key', 'compile-memory-context')
+      .send({ goal: 'Change provider streaming behavior', kind: 'planning', tokenBudget: 1200 });
+    assert.equal(compiled.status, 201);
+    assert.equal(compiled.body.data.kind, 'planning');
+    assert.ok(compiled.body.data.estimatedTokens <= 1200);
+    assert.ok(compiled.body.data.provenance.sourceFiles.includes('src/provider.js'));
+
+    const listed = await request(fixture.app).get(`/api/v1/projects/${projectId}/memory/context`);
+    assert.equal(listed.status, 200);
+    assert.equal(listed.body.data[0].id, compiled.body.data.id);
+
+    const fetched = await request(fixture.app).get(
+      `/api/v1/projects/${projectId}/memory/context/${compiled.body.data.id}`
+    );
+    assert.equal(fetched.status, 200);
+    assert.equal(fetched.body.data.contentHash, compiled.body.data.contentHash);
   } finally {
     fixture.close();
     gitFixture.close();

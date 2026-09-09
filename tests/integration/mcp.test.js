@@ -58,6 +58,7 @@ test('MCP exposes compact timeline and review tools', async () => {
     assert.ok(names.includes('memory_neighbors'));
     assert.ok(names.includes('memory_impact'));
     assert.ok(names.includes('memory_refresh'));
+    assert.ok(names.includes('memory_context'));
     assert.equal(names.includes('gate_decide'), false);
 
     const result = await fixture.client.callTool({
@@ -189,6 +190,20 @@ test('MCP memory impact returns symbol-grounded structural dependents', async ()
     });
     assert.deepEqual(neighborhood.structuredContent.edgeTypes, ['REFERENCES']);
     assert.ok(neighborhood.structuredContent.edges.every((edge) => edge.type === 'REFERENCES'));
+
+    const context = await fixture.client.callTool({
+      name: 'memory_context',
+      arguments: {
+        projectId: 1,
+        goal: 'Change provider stream normalization',
+        kind: 'execution',
+        tokenBudget: 1200,
+        idempotencyKey: 'mcp-memory-context'
+      }
+    });
+    assert.equal(context.isError, undefined);
+    assert.equal(context.structuredContent.kind, 'execution');
+    assert.ok(context.structuredContent.provenance.sourceFiles.includes('src/core.js'));
   } finally {
     await fixture.cleanup();
     repository.close();

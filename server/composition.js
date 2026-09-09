@@ -3,6 +3,7 @@ import { GithubRemoteAdapter } from './adapters/remote/github.js';
 import { ClaudeProvider } from './adapters/providers/claude.js';
 import { OpenCodeProvider } from './adapters/providers/opencode.js';
 import { DashboardService } from './application/dashboard-service.js';
+import { ContextCompiler } from './application/context-compiler.js';
 import { EventStore } from './application/event-store.js';
 import { ExecutionService } from './application/execution-service.js';
 import { InstructionService } from './application/instruction-service.js';
@@ -53,12 +54,14 @@ export function buildServices({ db, config, providers }) {
 
   const instructions = new InstructionService({ db, projects, eventStore: events });
   const memory = new MemoryService({ db, projects, gitAdapter, eventStore: events });
+  const contexts = new ContextCompiler({ db, projects, memory, instructions, gitAdapter, eventStore: events });
   return {
     db,
     events,
     projects,
     instructions,
     memory,
+    contexts,
     timeline,
     execution,
     reviews: new ReviewService(db, events),

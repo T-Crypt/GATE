@@ -52,6 +52,9 @@ export const api = {
     return request(`/projects/${projectId}/memory/nodes/${encodeURIComponent(nodeId)}/neighbors?${query}`);
   },
   getMemoryImpact: (projectId, query) => request(`/projects/${projectId}/memory/impact?${new URLSearchParams({ q: query })}`),
+  compileMemoryContext: (projectId, input) => request(`/projects/${projectId}/memory/context`, { method: 'POST', body: input }),
+  listMemoryContexts: (projectId, limit = 20) => request(`/projects/${projectId}/memory/context?${new URLSearchParams({ limit })}`),
+  getMemoryContext: (projectId, capsuleId) => request(`/projects/${projectId}/memory/context/${encodeURIComponent(capsuleId)}`),
   getTimeline: (projectId) => request(`/projects/${projectId}/timeline`),
   replaceTimeline: (projectId, graph) => request(`/projects/${projectId}/timeline`, { method: 'PUT', body: graph }),
   draftTimeline: (projectId, goal, model) => request(`/projects/${projectId}/timeline/drafts`, { method: 'POST', body: { goal, ...(model ? { model } : {}) } }),
