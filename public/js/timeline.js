@@ -141,6 +141,26 @@ function drawConnections(container, timeline) {
   }).join('');
 }
 
+function renderDraftReview(draft) {
+  const nodes = draft.graph.nodes;
+  const milestones = nodes.filter((node) => node.kind === 'milestone');
+  const steps = nodes.filter((node) => node.kind === 'step');
+  const outline = milestones
+    .map((milestone) => {
+      const count = steps.filter((step) => step.parentId === milestone.id).length;
+      return `<li><span class="draft-key">${escapeHtml(milestone.key)}</span>${escapeHtml(milestone.title)}<small>${count} step${count === 1 ? '' : 's'}</small></li>`;
+    })
+    .join('');
+  return `<div class="draft-review">
+      <div class="draft-review-head">
+        <div><strong>Proposed timeline</strong><span>${milestones.length} milestones · ${steps.length} steps · ${draft.graph.edges.length} dependencies · ${draft.graph.gates.length} gates</span></div>
+        <div class="button-row"><button class="button" id="discardDraft">Dismiss</button><button class="button primary" id="acceptDraft">Accept draft</button></div>
+      </div>
+      ${outline ? `<ol class="draft-outline">${outline}</ol>` : ''}
+      <p class="draft-note">Nothing is applied until you accept. Accepting replaces the current timeline.</p>
+    </div>`;
+}
+
 export async function initTimeline(container, { project, api, onRunChanged }) {
   container.innerHTML = '<div class="panel timeline-loading"><div class="loading-orbit"></div><span>Loading timeline…</span></div>';
   try {
@@ -191,17 +211,31 @@ export async function initTimeline(container, { project, api, onRunChanged }) {
       const model = event.currentTarget.querySelector('#draftModel')?.value || undefined;
       button.disabled = true;
       button.textContent = 'Drafting…';
+      const result = container.querySelector('#draftResult');
+      result.innerHTML = '';
       try {
         const draft = await api.draftTimeline(project.id, goal, model);
-        const result = container.querySelector('#draftResult');
-        result.innerHTML = `<div class="draft-review"><div><strong>Proposed timeline</strong><span>${draft.graph.nodes.length} nodes · ${draft.graph.edges.length} dependencies</span></div><button class="button primary" id="acceptDraft">Accept draft</button></div>`;
+        // Show what actually came back. A draft changes nothing until a human
+        // accepts it, so without a preview a successful draft is easy to read
+        // as "nothing happened".
+        result.innerHTML = renderDraftReview(draft);
         result.querySelector('#acceptDraft').addEventListener('click', async () => {
           await api.acceptTimelineDraft(project.id, draft.id);
           showToast('Timeline draft accepted');
           await initTimeline(container, { project, api, onRunChanged });
         });
+        result.querySelector('#discardDraft').addEventListener('click', () => {
+          result.innerHTML = '';
+        });
+        result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       } catch (error) {
+        // The toast auto-dismisses; keep the reason on screen so a failed draft
+        // is not indistinguishable from the form simply resetting itself.
+        result.innerHTML = `<p class="draft-error">Draft failed: ${escapeHtml(error.message)}</p>`;
         showToast(error.message, 'error');
+      } finally {
+        // Restore the button on both paths — leaving it stuck on "Drafting…"
+        // after a successful draft makes the request look like it hung.
         button.disabled = false;
         button.textContent = 'Draft timeline';
       }

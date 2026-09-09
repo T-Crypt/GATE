@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { AppError } from '../../domain/errors.js';
 import { ProcessRunner } from './process-runner.js';
+import { buildTimelinePrompt } from './timeline-contract.js';
 
 export const DEFAULT_MODEL = 'opencode/big-pickle';
 
@@ -141,11 +142,8 @@ export class OpenCodeProvider {
 
   async draftTimeline({ goal, repositoryContext, cwd, model, env }) {
     const prompt = [
-      'Create a concise implementation timeline for the following local repository goal.',
-      'Return milestones and executable steps. Add code, test, visual, or approval gates where evidence is required.',
-      `Goal: ${goal}`,
-      `Repository context: ${repositoryContext || 'No additional context supplied.'}`,
-      'Reply with a single JSON object of the form {"nodes": [...], "edges": [...], "gates": [...]} and nothing else.'
+      buildTimelinePrompt({ goal, repositoryContext }),
+      'Reply with that JSON object and nothing else. No prose, no markdown fences.'
     ].join('\n\n');
     const parts = [];
     const lineReader = this.#lineReader((event) => {

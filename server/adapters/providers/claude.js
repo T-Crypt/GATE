@@ -2,17 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { AppError } from '../../domain/errors.js';
 import { ProcessRunner } from './process-runner.js';
-
-const timelineSchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['nodes', 'edges', 'gates'],
-  properties: {
-    nodes: { type: 'array', items: { type: 'object' } },
-    edges: { type: 'array', items: { type: 'object' } },
-    gates: { type: 'array', items: { type: 'object' } }
-  }
-};
+import { buildTimelinePrompt, timelineSchema } from './timeline-contract.js';
 
 function isEmptyObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0;
@@ -88,12 +78,7 @@ export class ClaudeProvider {
 
   async draftTimeline({ goal, repositoryContext, cwd, model, env }) {
     const chunks = [];
-    const prompt = [
-      'Create a concise implementation timeline for the following local repository goal.',
-      'Return milestones and executable steps. Add code, test, visual, or approval gates where evidence is required.',
-      `Goal: ${goal}`,
-      `Repository context: ${repositoryContext || 'No additional context supplied.'}`
-    ].join('\n\n');
+    const prompt = buildTimelinePrompt({ goal, repositoryContext });
     const running = await this.runner.start(
       {
         executable: this.executable,

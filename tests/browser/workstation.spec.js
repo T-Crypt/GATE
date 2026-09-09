@@ -231,3 +231,66 @@ test('overview, issues, and git render distinct views instead of one shared dash
   await expect(page.locator('#issuesPanel')).toHaveCount(0);
   await expect(page.getByPlaceholder('Capture a local work item')).toHaveCount(0);
 });
+
+test('a successful draft shows its plan and restores the draft button', async ({ page, request }) => {
+  const project = await ensureProject(request);
+  // Stub the provider round-trip: this test is about what the UI does with a
+  // draft, not about which model produced it.
+  await page.route('**/timeline/drafts', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          id: 'draft-1',
+          projectId: project.id,
+          graph: {
+            nodes: [
+              { id: 'm1', key: 'M1', kind: 'milestone', title: 'Foundation', parentId: null },
+              { id: 's1', key: 'M1.1', kind: 'step', title: 'Scaffold', parentId: 'm1' },
+              { id: 's2', key: 'M1.2', kind: 'step', title: 'Test', parentId: 'm1' }
+            ],
+            edges: [{ fromNodeId: 's1', toNodeId: 's2', type: 'depends_on' }],
+            gates: [{ nodeId: 's2', type: 'test', title: 'Suite green' }]
+          }
+        },
+        meta: { apiVersion: 'v1' }
+      })
+    });
+  });
+
+  await page.goto('/#/timeline');
+  await page.getByLabel('Active project').selectOption(String(project.id));
+  await page.locator('#goalInput').fill('Build a hello world CLI');
+  const draftButton = page.getByRole('button', { name: 'Draft timeline' });
+  await draftButton.click();
+
+  await expect(page.getByText('Proposed timeline')).toBeVisible();
+  await expect(page.getByText('1 milestones · 2 steps · 1 dependencies · 1 gates')).toBeVisible();
+  await expect(page.locator('.draft-outline li')).toHaveText([/M1\s*Foundation\s*2 steps/]);
+  await expect(page.getByRole('button', { name: 'Accept draft' })).toBeVisible();
+  // The reported symptom: the button stayed greyed on "Drafting…" after success.
+  await expect(draftButton).toBeEnabled();
+});
+
+test('a failed draft explains itself instead of silently resetting', async ({ page, request }) => {
+  const project = await ensureProject(request);
+  await page.route('**/timeline/drafts', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    await route.fulfill({
+      status: 502,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: { code: 'PROVIDER_FAILED', message: 'Claude timeline drafting failed' } })
+    });
+  });
+
+  await page.goto('/#/timeline');
+  await page.getByLabel('Active project').selectOption(String(project.id));
+  await page.locator('#goalInput').fill('Build a hello world CLI');
+  const draftButton = page.getByRole('button', { name: 'Draft timeline' });
+  await draftButton.click();
+
+  await expect(page.locator('.draft-error')).toContainText('Claude timeline drafting failed');
+  await expect(draftButton).toBeEnabled();
+});
