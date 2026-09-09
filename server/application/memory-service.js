@@ -36,6 +36,10 @@ function limit(value, maximum = 100) {
   return Math.max(1, Math.min(Number(value) || 20, maximum));
 }
 
+function uniqueNodes(nodes) {
+  return [...new Map(nodes.map((node) => [node.id, node])).values()];
+}
+
 export class MemoryService {
   constructor({ db, projects, gitAdapter, eventStore, indexService = new MemoryIndexService() }) {
     this.db = db;
@@ -155,9 +159,10 @@ export class MemoryService {
     parameters.push(limit(requestedLimit));
     const rows = this.db.prepare(
       `SELECT * FROM memory_nodes WHERE project_id = ? AND (${clauses})${typeClause}
-       ORDER BY CASE node_type WHEN 'file' THEN 0 WHEN 'directory' THEN 1 ELSE 2 END, path
+       ORDER BY CASE WHEN lower(name) = lower(?) THEN 0 WHEN lower(path) = lower(?) THEN 1 ELSE 2 END,
+         CASE node_type WHEN 'symbol' THEN 0 WHEN 'file' THEN 1 WHEN 'directory' THEN 2 ELSE 3 END, path
        LIMIT ?`
-    ).all(projectId, ...parameters);
+    ).all(projectId, ...parameters.slice(0, -1), normalized, normalized, parameters.at(-1));
     return { projectId, query: normalized, items: rows.map(decodeNode) };
   }
 
@@ -193,14 +198,68 @@ export class MemoryService {
   }
 
   impact(projectId, { query, limit: requestedLimit } = {}) {
-    const matches = this.search(projectId, { query, limit: limit(requestedLimit, 25), type: 'file' }).items;
-    const affected = matches.map((node) => this.neighbors(projectId, node.id, { depth: 1 }));
+    const normalized = String(query || '').trim();
+    const matches = this.search(projectId, { query: normalized, limit: limit(requestedLimit, 25) }).items
+      .filter((node) => ['file', 'symbol'].includes(node.type));
+    const matchedSymbols = matches.filter((node) => node.type === 'symbol');
+    const matchedFiles = matches.filter((node) => node.type === 'file');
+    const symbolSourcePaths = [...new Set(matchedSymbols.map((node) => node.sourcePath))];
+    const sourceFiles = symbolSourcePaths.length
+      ? this.db.prepare(
+        `SELECT * FROM memory_nodes WHERE project_id = ? AND node_type = 'file'
+         AND path IN (${symbolSourcePaths.map(() => '?').join(',')})`
+      ).all(projectId, ...symbolSourcePaths).map(decodeNode)
+      : [];
+    const declaringFiles = uniqueNodes([...matchedFiles, ...sourceFiles]);
+    const seedIds = new Set([...matches, ...declaringFiles].map((node) => node.id));
+    const discovered = new Map();
+    const edgeMap = new Map();
+    const reasons = {};
+    for (const node of matches) reasons[node.id] = [`Direct match for “${normalized}”`];
+    for (const node of declaringFiles) {
+      reasons[node.id] ||= [];
+      if (!reasons[node.id].length) reasons[node.id].push(`Declares matching symbol “${matchedSymbols.find((symbol) => symbol.sourcePath === node.path)?.name}”`);
+    }
+
+    let frontier = [...seedIds];
+    for (let depth = 0; depth < 2 && frontier.length; depth += 1) {
+      const placeholders = frontier.map(() => '?').join(',');
+      const found = this.db.prepare(
+        `SELECT * FROM memory_edges
+         WHERE project_id = ? AND edge_type IN ('IMPORTS', 'REFERENCES')
+           AND target_node_id IN (${placeholders})`
+      ).all(projectId, ...frontier).map(decodeEdge);
+      const sourceIds = [...new Set(found.map((edge) => edge.sourceNodeId).filter((id) => !seedIds.has(id) && !discovered.has(id)))];
+      const sourceNodes = sourceIds.length
+        ? this.db.prepare(
+          `SELECT * FROM memory_nodes WHERE project_id = ? AND id IN (${sourceIds.map(() => '?').join(',')})`
+        ).all(projectId, ...sourceIds).map(decodeNode)
+        : [];
+      for (const node of sourceNodes) discovered.set(node.id, node);
+      for (const edge of found) {
+        edgeMap.set(edge.id, edge);
+        reasons[edge.sourceNodeId] ||= [];
+        const description = edge.type === 'IMPORTS' ? 'Imports an affected file' : 'References an affected symbol';
+        if (!reasons[edge.sourceNodeId].includes(description)) reasons[edge.sourceNodeId].push(description);
+      }
+      frontier = sourceNodes.map((node) => node.id);
+    }
+
+    const affectedFiles = [...discovered.values()].filter((node) => node.type === 'file');
+    const tests = affectedFiles.filter((node) => node.metadata.isTest).sort((left, right) => left.path.localeCompare(right.path));
+    const dependents = affectedFiles.filter((node) => !node.metadata.isTest).sort((left, right) => left.path.localeCompare(right.path));
+    const productionCount = uniqueNodes([...declaringFiles.filter((node) => !node.metadata.isTest), ...dependents]).length;
     return {
       projectId,
-      query: String(query || '').trim(),
-      risk: matches.length > 12 ? 'high' : matches.length > 4 ? 'medium' : 'low',
+      query: normalized,
+      risk: productionCount > 12 ? 'high' : productionCount > 4 ? 'medium' : 'low',
       directMatches: matches,
-      affected
+      declaringFiles: declaringFiles.sort((left, right) => left.path.localeCompare(right.path)),
+      dependents,
+      tests,
+      symbols: matchedSymbols,
+      edges: [...edgeMap.values()],
+      reasons
     };
   }
 }

@@ -16,7 +16,7 @@ export function memoryRouter(memory) {
     const query = z.object({
       q: z.string().trim().min(1).max(500),
       limit: z.coerce.number().int().positive().max(100).optional(),
-      type: z.enum(['file', 'directory', 'repository']).optional()
+      type: z.enum(['file', 'directory', 'repository', 'symbol']).optional()
     }).parse(req.query);
     return data(res, memory.search(Number(req.params.projectId), { query: query.q, ...query }));
   });

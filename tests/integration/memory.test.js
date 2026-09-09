@@ -104,3 +104,46 @@ test('memory refresh updates only Git-changed paths after the initial index', as
     repository.close();
   }
 });
+
+test('memory impact follows symbol references through production dependents to tests', async () => {
+  const repository = createGitFixture();
+  const { db, close } = createTestDatabase();
+  const events = new EventStore(db);
+  const projects = new ProjectService(db, events, new GitAdapter());
+  const memory = new MemoryService({ db, projects, gitAdapter: new GitAdapter(), eventStore: events });
+
+  try {
+    fs.mkdirSync(path.join(repository.repoPath, 'src'), { recursive: true });
+    fs.mkdirSync(path.join(repository.repoPath, 'tests'), { recursive: true });
+    fs.writeFileSync(path.join(repository.repoPath, 'src', 'core.js'), 'export function stream() {}\n');
+    fs.writeFileSync(
+      path.join(repository.repoPath, 'src', 'adapter.js'),
+      "import { stream } from './core.js';\nexport function adapt() { return stream(); }\n"
+    );
+    fs.writeFileSync(
+      path.join(repository.repoPath, 'tests', 'adapter.test.js'),
+      "import { adapt } from '../src/adapter.js';\ntest('adapter', () => adapt());\n"
+    );
+    repository.run(['add', '.']);
+    repository.run(['commit', '-m', 'add impact fixture']);
+    const project = projects.create({ name: 'Impact fixture', repoPath: repository.repoPath }, context('create-impact'));
+    await memory.refresh(project.id, { force: true }, context('memory-impact-refresh'));
+
+    const impact = memory.impact(project.id, { query: 'stream' });
+
+    assert.deepEqual(impact.directMatches.map((node) => node.name), ['stream']);
+    assert.deepEqual(impact.declaringFiles.map((node) => node.path), ['src/core.js']);
+    assert.deepEqual(impact.dependents.map((node) => node.path), ['src/adapter.js']);
+    assert.deepEqual(impact.tests.map((node) => node.path), ['tests/adapter.test.js']);
+    assert.deepEqual(impact.symbols.map((node) => node.name), ['stream']);
+    assert.equal(impact.risk, 'low');
+    assert.ok(impact.edges.some((edge) => edge.type === 'REFERENCES'));
+    assert.ok(impact.edges.some((edge) => edge.type === 'IMPORTS'));
+    assert.ok(impact.edges.every((edge) => edge.provenance.origin === 'static_parser'));
+    assert.match(impact.reasons[impact.dependents[0].id].join(' '), /imports|references/i);
+    assert.equal(new Set(impact.tests.map((node) => node.id)).size, impact.tests.length);
+  } finally {
+    close();
+    repository.close();
+  }
+});

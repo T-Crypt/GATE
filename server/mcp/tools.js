@@ -240,7 +240,7 @@ export function registerTools(server, services) {
   server.registerTool(
     'memory_status',
     {
-      description: 'Read the local GATE Memory revision, staleness, and file graph counts.',
+      description: 'Read the local GATE Memory revision, staleness, and structural graph counts.',
       inputSchema: { projectId },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
@@ -250,12 +250,12 @@ export function registerTools(server, services) {
   server.registerTool(
     'memory_search',
     {
-      description: 'Search the local file graph by path or filename. Results retain filesystem provenance.',
+      description: 'Search the local structural graph by file path or symbol name. Results retain repository provenance.',
       inputSchema: {
         projectId,
         query: z.string().trim().min(1).max(500),
         limit: z.number().int().positive().max(100).optional(),
-        type: z.enum(['file', 'directory', 'repository']).optional()
+        type: z.enum(['file', 'directory', 'repository', 'symbol']).optional()
       },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
@@ -265,7 +265,7 @@ export function registerTools(server, services) {
   server.registerTool(
     'memory_neighbors',
     {
-      description: 'Traverse the deterministic local file graph around a memory node.',
+      description: 'Traverse deterministic containment, import, and reference edges around a memory node.',
       inputSchema: {
         projectId,
         nodeId: z.string().trim().min(1).max(500),
@@ -279,7 +279,7 @@ export function registerTools(server, services) {
   server.registerTool(
     'memory_impact',
     {
-      description: 'Find file-level graph matches and direct structural neighbors for an impact preview.',
+      description: 'Find matching files or symbols, declaring files, transitive import dependents, and affected tests.',
       inputSchema: { projectId, query: z.string().trim().min(1).max(500), limit: z.number().int().positive().max(25).optional() },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },

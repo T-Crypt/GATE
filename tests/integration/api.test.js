@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 import request from 'supertest';
 
@@ -149,6 +151,14 @@ test('memory routes refresh and search the local file graph', async () => {
   const gitFixture = createGitFixture();
   const fixture = setup();
   try {
+    fs.mkdirSync(path.join(gitFixture.repoPath, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(gitFixture.repoPath, 'src', 'provider.js'), 'export function stream() {}\n');
+    fs.writeFileSync(
+      path.join(gitFixture.repoPath, 'src', 'consumer.js'),
+      "import { stream } from './provider.js';\nexport const consume = () => stream();\n"
+    );
+    gitFixture.run(['add', '.']);
+    gitFixture.run(['commit', '-m', 'add API memory fixture']);
     const created = await request(fixture.app)
       .post('/api/v1/projects')
       .set('Idempotency-Key', 'create-memory-project')
@@ -165,6 +175,15 @@ test('memory routes refresh and search the local file graph', async () => {
     const search = await request(fixture.app).get(`/api/v1/projects/${projectId}/memory/search?q=README`);
     assert.equal(search.status, 200);
     assert.ok(search.body.data.items.some((item) => item.path === 'README.md'));
+
+    const symbols = await request(fixture.app).get(`/api/v1/projects/${projectId}/memory/search?q=stream&type=symbol`);
+    assert.equal(symbols.status, 200);
+    assert.deepEqual(symbols.body.data.items.map((item) => item.name), ['stream']);
+
+    const impact = await request(fixture.app).get(`/api/v1/projects/${projectId}/memory/impact?q=stream`);
+    assert.equal(impact.status, 200);
+    assert.deepEqual(impact.body.data.dependents.map((item) => item.path), ['src/consumer.js']);
+    assert.ok(impact.body.data.edges.some((edge) => edge.type === 'REFERENCES'));
   } finally {
     fixture.close();
     gitFixture.close();

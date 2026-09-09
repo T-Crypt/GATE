@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -7,12 +9,13 @@ import { createMcpServer } from '../../server/mcp/server.js';
 import { buildServices } from '../../server/composition.js';
 import { createTestDatabase } from '../helpers/database.js';
 import { FakeProvider } from '../helpers/fake-provider.js';
+import { createGitFixture } from '../helpers/git.js';
 
-async function setup() {
+async function setup(repoPath = '/tmp/mcp-fixture') {
   const database = createTestDatabase();
   database.db
     .prepare(`INSERT INTO projects(name, repo_path, protected_branches_json) VALUES (?, ?, ?)`)
-    .run('MCP fixture', '/tmp/mcp-fixture', '["main"]');
+    .run('MCP fixture', repoPath, '["main"]');
   const services = buildServices({
     db: database.db,
     config: { worktreeDir: '/tmp/gate-mcp-worktrees', outputLimitBytes: 20_000 },
@@ -25,6 +28,7 @@ async function setup() {
   await client.connect(clientTransport);
   return {
     ...database,
+    services,
     client,
     server,
     async cleanup() {
@@ -141,5 +145,36 @@ test('MCP creates a tagged bug report and reads it back through the activity fee
     assert.deepEqual(feed.structuredContent.runs, []);
   } finally {
     await fixture.cleanup();
+  }
+});
+
+test('MCP memory impact returns symbol-grounded structural dependents', async () => {
+  const repository = createGitFixture();
+  fs.mkdirSync(path.join(repository.repoPath, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(repository.repoPath, 'src', 'core.js'), 'export function stream() {}\n');
+  fs.writeFileSync(
+    path.join(repository.repoPath, 'src', 'adapter.js'),
+    "import { stream } from './core.js';\nexport function adapt() { return stream(); }\n"
+  );
+  repository.run(['add', '.']);
+  repository.run(['commit', '-m', 'add MCP memory fixture']);
+  const fixture = await setup(repository.repoPath);
+  try {
+    const refreshed = await fixture.client.callTool({
+      name: 'memory_refresh',
+      arguments: { projectId: 1, force: true, idempotencyKey: 'mcp-memory-refresh' }
+    });
+    assert.equal(refreshed.isError, undefined);
+
+    const impact = await fixture.client.callTool({
+      name: 'memory_impact',
+      arguments: { projectId: 1, query: 'stream' }
+    });
+    assert.equal(impact.isError, undefined);
+    assert.deepEqual(impact.structuredContent.symbols.map((item) => item.name), ['stream']);
+    assert.deepEqual(impact.structuredContent.dependents.map((item) => item.path), ['src/adapter.js']);
+  } finally {
+    await fixture.cleanup();
+    repository.close();
   }
 });
