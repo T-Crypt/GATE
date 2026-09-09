@@ -6,6 +6,7 @@ import request from 'supertest';
 
 import { createApp } from '../../server/app.js';
 import { EventStore } from '../../server/application/event-store.js';
+import { FeatureService } from '../../server/application/feature-service.js';
 import { ContextCompiler } from '../../server/application/context-compiler.js';
 import { InstructionService } from '../../server/application/instruction-service.js';
 import { ProjectService } from '../../server/application/project-service.js';
@@ -24,12 +25,20 @@ function setup() {
   const timeline = new TimelineService(database.db, events);
   const instructions = new InstructionService({ db: database.db, projects, eventStore: events });
   const contexts = new ContextCompiler({ db: database.db, projects, memory, instructions, gitAdapter: git, eventStore: events });
+  const features = new FeatureService(database.db, events, projects);
   const services = {
     events,
     projects,
     instructions,
     memory,
     contexts,
+    features,
+    planner: {
+      plan: async (projectId, input) => ({ id: 'plan-1', projectId, ...input, status: 'proposed' }),
+      get: (projectId, id) => ({ id, projectId, status: 'proposed' }),
+      accept: (projectId, id) => ({ id, projectId, status: 'accepted' }),
+      expandMilestone: async (projectId, sourceId) => ({ id: 'expansion-1', projectId, sourceId, status: 'proposed' })
+    },
     timeline,
     execution: {
       list: () => [],
@@ -242,6 +251,23 @@ test('activity feed route returns the execution service payload', async () => {
   } finally {
     fixture.close();
   }
+});
+
+test('feature routes preserve lifecycle and expose planning actions', async () => {
+  const fixture = setup();
+  try {
+    fixture.db.prepare("INSERT INTO projects(name, repo_path) VALUES ('Feature project', 'E:/Github/GATE')").run();
+    const created = await request(fixture.app).post('/api/v1/projects/1/features').set('Idempotency-Key', 'feature-http').send({ title: 'Provider router', intent: 'Plan provider selection.' });
+    assert.equal(created.status, 201);
+    assert.equal(created.body.data.status, 'idea');
+    const listed = await request(fixture.app).get('/api/v1/projects/1/features');
+    assert.equal(listed.body.data[0].id, created.body.data.id);
+    const planning = await request(fixture.app).post(`/api/v1/projects/1/features/${created.body.data.id}/plan`).set('Idempotency-Key', 'feature-plan-http').send({ tokenBudget: 1200 });
+    assert.equal(planning.status, 201);
+    assert.equal(planning.body.data.sourceType, 'feature');
+    const issue = await request(fixture.app).post('/api/v1/projects/1/issues/12/plan').set('Idempotency-Key', 'issue-plan-http').send({});
+    assert.equal(issue.body.data.sourceType, 'issue');
+  } finally { fixture.close(); }
 });
 
 test('readiness distinguishes process health from service readiness', async () => {

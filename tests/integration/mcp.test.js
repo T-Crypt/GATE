@@ -59,6 +59,10 @@ test('MCP exposes compact timeline and review tools', async () => {
     assert.ok(names.includes('memory_impact'));
     assert.ok(names.includes('memory_refresh'));
     assert.ok(names.includes('memory_context'));
+    assert.ok(names.includes('feature_create'));
+    assert.ok(names.includes('feature_plan'));
+    assert.ok(names.includes('issue_plan'));
+    assert.ok(names.includes('milestone_expand'));
     assert.equal(names.includes('gate_decide'), false);
 
     const result = await fixture.client.callTool({
@@ -147,6 +151,19 @@ test('MCP creates a tagged bug report and reads it back through the activity fee
   } finally {
     await fixture.cleanup();
   }
+});
+
+test('MCP creates and reads durable features without approval capability', async () => {
+  const fixture = await setup();
+  try {
+    const created = await fixture.client.callTool({ name: 'feature_create', arguments: { projectId: 1, title: 'Feature workspace', intent: 'Add durable feature planning.', idempotencyKey: 'mcp-feature' } });
+    assert.equal(created.isError, undefined);
+    assert.equal(created.structuredContent.status, 'idea');
+    const listed = await fixture.client.callTool({ name: 'feature_list', arguments: { projectId: 1 } });
+    assert.deepEqual(listed.structuredContent.items.map((feature) => feature.id), [created.structuredContent.id]);
+    const tools = await fixture.client.listTools();
+    assert.equal(tools.tools.some((tool) => /approve|merge|push/.test(tool.name)), false);
+  } finally { await fixture.cleanup(); }
 });
 
 test('MCP memory impact returns symbol-grounded structural dependents', async () => {

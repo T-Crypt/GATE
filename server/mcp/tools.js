@@ -316,4 +316,29 @@ export function registerTools(server, services) {
       services.contexts.compile(id, input, actorContext(key))
     )
   );
+
+  server.registerTool('feature_list', {
+    description: 'List durable feature workspaces for a project.', inputSchema: { projectId }, annotations: { readOnlyHint: true, openWorldHint: false }
+  }, handler(({ projectId: id }) => services.features.list(id)));
+  server.registerTool('feature_get', {
+    description: 'Read one durable feature workspace.', inputSchema: { projectId, featureId: z.string().uuid() }, annotations: { readOnlyHint: true, openWorldHint: false }
+  }, handler(({ projectId: id, featureId }) => services.features.get(id, featureId)));
+  server.registerTool('feature_create', {
+    description: 'Create a local feature workspace.', inputSchema: { projectId, title: z.string().trim().min(1).max(500), intent: z.string().trim().min(1).max(20_000), idempotencyKey }, annotations: { idempotentHint: true, openWorldHint: false }
+  }, handler(({ projectId: id, idempotencyKey: key, ...input }) => services.features.create(id, input, actorContext(key))));
+  server.registerTool('feature_update', {
+    description: 'Advance a feature through its explicit lifecycle.', inputSchema: { projectId, featureId: z.string().uuid(), status: z.enum(['idea','planning','approved','in_progress','blocked','review','complete','cancelled']), idempotencyKey }, annotations: { idempotentHint: true, openWorldHint: false }
+  }, handler(({ projectId: id, featureId, status, idempotencyKey: key }) => services.features.transition(id, featureId, status, actorContext(key))));
+  server.registerTool('feature_plan', {
+    description: 'Create a Memory-grounded proposed timeline for a feature.', inputSchema: { projectId, featureId: z.string().uuid(), model: z.string().trim().max(200).optional(), tokenBudget: z.number().int().min(512).max(32_000).optional(), idempotencyKey }, annotations: { idempotentHint: true, openWorldHint: false }
+  }, handler(({ projectId: id, featureId, idempotencyKey: key, ...input }) => services.planner.plan(id, { ...input, sourceType: 'feature', sourceId: featureId }, actorContext(key))));
+  server.registerTool('issue_plan', {
+    description: 'Create a Memory-grounded proposed timeline for a local issue.', inputSchema: { projectId, issueId: z.number().int().positive(), model: z.string().trim().max(200).optional(), tokenBudget: z.number().int().min(512).max(32_000).optional(), idempotencyKey }, annotations: { idempotentHint: true, openWorldHint: false }
+  }, handler(({ projectId: id, issueId, idempotencyKey: key, ...input }) => services.planner.plan(id, { ...input, sourceType: 'issue', sourceId: String(issueId) }, actorContext(key))));
+  server.registerTool('milestone_expand', {
+    description: 'Propose child steps for an accepted milestone without changing the current timeline.', inputSchema: { projectId, milestoneId: z.string().trim().min(1).max(500), model: z.string().trim().max(200).optional(), tokenBudget: z.number().int().min(512).max(32_000).optional(), idempotencyKey }, annotations: { idempotentHint: true, openWorldHint: false }
+  }, handler(({ projectId: id, milestoneId, idempotencyKey: key, ...input }) => services.planner.expandMilestone(id, milestoneId, input, actorContext(key))));
+  server.registerTool('planning_get', {
+    description: 'Read a proposed or accepted planning request with impact and provenance.', inputSchema: { projectId, planningRequestId: z.string().uuid() }, annotations: { readOnlyHint: true, openWorldHint: false }
+  }, handler(({ projectId: id, planningRequestId }) => services.planner.get(id, planningRequestId)));
 }

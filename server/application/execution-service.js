@@ -223,7 +223,7 @@ export class ExecutionService {
     return this.get(runId);
   }
 
-  async draftTimeline(projectId, goal, context, modelOverride) {
+  async draftTimeline(projectId, goal, context, modelOverride, options = {}) {
     const project = this.projects.get(projectId);
     const provider = this.providers.get(project.providerKind);
     if (!provider?.draftTimeline) {
@@ -232,14 +232,13 @@ export class ExecutionService {
       });
     }
     const digest = this.db.prepare('SELECT * FROM project_digests WHERE project_id = ?').get(projectId) || null;
-    const graph = normalizeTimelineGraph(
-      await provider.draftTimeline({
+    const providerGraph = await provider.draftTimeline({
         goal: String(goal ?? '').trim(),
-        repositoryContext: buildRepositoryContext(project, digest),
+        repositoryContext: options.repositoryContext || buildRepositoryContext(project, digest),
         cwd: project.repoPath,
         model: modelOverride || project.providerConfig.model
-      })
-    );
+      });
+    const graph = normalizeTimelineGraph(options.transformGraph ? options.transformGraph(providerGraph) : providerGraph);
     return runIdempotent(
       this.db,
       context,
@@ -283,6 +282,12 @@ export class ExecutionService {
       .prepare("UPDATE timeline_drafts SET status = 'accepted', accepted_at = datetime('now') WHERE id = ?")
       .run(draftId);
     return { ...this.#getDraft(draftId), timeline };
+  }
+
+  getDraft(projectId, draftId) {
+    const draft = this.#getDraft(draftId);
+    if (draft.projectId !== projectId) throw notFound('Timeline draft', draftId);
+    return draft;
   }
 
   async cancel(runId, context) {

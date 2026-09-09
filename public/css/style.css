@@ -343,6 +343,17 @@ input::placeholder,textarea::placeholder { color: var(--faint); }
 .context-capsule summary > span:first-child { display: grid; gap: 4px; }
 .context-capsule summary small { color: var(--text-muted); font-size: 10px; }
 .context-capsule-body { padding: 0 11px 11px; }
+.features-layout { display: grid; grid-template-columns: minmax(280px,.75fr) minmax(0,1.25fr); gap: 14px; }
+.feature-list,.feature-plans { display: grid; gap: 8px; margin-top: 16px; }
+.feature-card { display: flex; justify-content: space-between; gap: 12px; width: 100%; padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); color: var(--text-soft); text-align: left; cursor: pointer; }
+.feature-card:hover { border-color: var(--accent); }
+.feature-card span:first-child { display: grid; gap: 4px; min-width: 0; }
+.feature-card small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.feature-plan { margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); }
+.feature-impact-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin: 12px 0; }
+.feature-impact-list { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 10px; }
+.milestone-actions { display: grid; justify-items: end; gap: 6px; }
+.milestone-expansion { grid-column: 1 / -1; }
 .review-card[data-state="stale"] { border-color: rgba(247,199,106,.3); }
 .review-card[data-state="fresh"] { border-color: rgba(111,231,173,.26); }
 .evidence-state { display: grid; gap: 3px; margin-bottom: 16px; padding: 11px; border: 1px solid var(--line); border-radius: 11px; background: rgba(255,255,255,.018); }
@@ -404,7 +415,7 @@ input::placeholder,textarea::placeholder { color: var(--faint); }
   .goal-form { grid-template-columns: 1fr; }
   .timeline-toolbar { align-items: flex-start; flex-direction: column; }
   .context-compiler-form { grid-template-columns: 1fr; }
-  .review-grid,.settings-grid,.memory-grid,.dashboard-metrics,.summary-grid,.issues-board { grid-template-columns: 1fr; }
+  .review-grid,.settings-grid,.memory-grid,.features-layout,.feature-impact-grid,.dashboard-metrics,.summary-grid,.issues-board { grid-template-columns: 1fr; }
   .inline-form { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }

@@ -3,6 +3,7 @@ import { appendLiveActivity, initAgent, renderActivityRail } from './agent.js';
 import { initActivity } from './activity.js';
 import { emptyState, escapeHtml, openDialog, showToast } from './components.js';
 import { initGit } from './git.js';
+import { initFeatures } from './features.js';
 import { initIssues } from './issues.js';
 import { initMemory } from './memory.js';
 import { initOverview } from './overview.js';
@@ -22,6 +23,7 @@ let reconnectTimer = null;
 const routes = [
   ['overview', 'OV', 'Overview'],
   ['timeline', 'TL', 'Timeline'],
+  ['features', 'FT', 'Features'],
   ['memory', 'MM', 'Memory'],
   ['agent', 'AI', 'Agent'],
   ['activity', 'AC', 'Activity'],
@@ -99,6 +101,7 @@ function renderView() {
   const definitions = {
     overview: ['Project signal', 'Project overview', 'Execution, review, and repository health at a glance.'],
     timeline: ['Guided execution', 'Interactive timeline', 'Milestones, dependencies, code gates, visual gates, and approvals.'],
+    features: ['Project planning', 'Features', 'Durable intent, grounded impact, proposed plans, and accepted work.'],
     memory: ['Project intelligence', 'Memory', 'Local file graph, repository revision, and deterministic impact previews.'],
     agent: [providerName(activeProject(state).providerKind), 'Agent control', 'Observe current intent, streamed output, and bounded execution.'],
     activity: ['Run history', 'Activity', 'Every timeline-driven run against this project, with status and output.'],
@@ -113,6 +116,8 @@ function renderView() {
   const project = activeProject(state);
   if (state.route === 'timeline') {
     void initTimeline(content, { project, api, onRunChanged: async () => refreshActivity() });
+  } else if (state.route === 'features') {
+    void initFeatures(content, { project, api });
   } else if (state.route === 'memory') {
     void initMemory(content, { project, api });
   } else if (state.route === 'agent') {

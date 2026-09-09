@@ -4,6 +4,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { EventStore } from '../../server/application/event-store.js';
+import { FeatureService } from '../../server/application/feature-service.js';
 import { ProjectService } from '../../server/application/project-service.js';
 import { DashboardService } from '../../server/application/dashboard-service.js';
 import { RepoMirrorService, ensureGateIgnored } from '../../server/application/repo-mirror.js';
@@ -51,4 +52,21 @@ test('syncing the repo mirror keeps .gate/ gitignored for projects connected bef
     database.close();
     repository.close();
   }
+});
+
+test('repo mirror exports durable features and planning links', () => {
+  const repository = createRepository();
+  const database = createTestDatabase();
+  try {
+    const events = new EventStore(database.db);
+    const projects = new ProjectService(database.db, events);
+    const project = projects.create({ name: 'Features', repoPath: repository.repoPath }, context('feature-project'));
+    const features = new FeatureService(database.db, events, projects);
+    const feature = features.create(project.id, { title: 'Context planning', intent: 'Keep planning grounded.' }, context('feature'));
+    new RepoMirrorService({ db: database.db, projects }).sync(project.id);
+    const exported = JSON.parse(fs.readFileSync(path.join(repository.repoPath, '.gate', 'features.json'), 'utf8'));
+    assert.equal(exported[0].id, feature.id);
+    assert.equal(exported[0].intent, 'Keep planning grounded.');
+    assert.deepEqual(exported[0].planningRequests, []);
+  } finally { database.close(); repository.close(); }
 });
