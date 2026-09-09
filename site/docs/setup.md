@@ -4,11 +4,13 @@ title: Setup & Operations
 permalink: /docs/setup/
 ---
 
+Requirements, npm scripts, environment configuration, the on-disk data layout, and how backups work.
+
 ## Requirements
 
 - Node.js 24+
 - Git
-- The Claude CLI, authenticated locally (the provider adapter invokes the `claude` executable)
+- A provider CLI authenticated locally — the Claude adapter invokes the `claude` executable; OpenCode support is the same contract
 
 ## Install and run
 
@@ -48,6 +50,8 @@ All configuration is via environment variables (see `.env.example`):
 | `GATE_GITHUB_TOKEN` | *(unset)* | GitHub token enabling the read-only remote overview (open PRs and issues) in the Git view. Gate only reads; it never creates, merges, or pushes. |
 | `GATE_GITHUB_API_URL` | `https://api.github.com` | GitHub REST API base URL; override for GitHub Enterprise. |
 
+> Tokens are read from the environment, never from project configuration or the database. Gate holds no credentials itself.
+
 ## Data layout
 
 Under `GATE_DATA_DIR` (default `data/`):
@@ -56,11 +60,13 @@ Under `GATE_DATA_DIR` (default `data/`):
 - `worktrees/` — linked worktrees, one per run, on branches named `<project-prefix><run-id>` (`work/gate-<run-id>` by default; the prefix is set per project at connect time or from Settings).
 - `tests/<project-id>/` — validation artifacts; always local.
 
+Runs never execute against the base checkout; every run uses its own linked worktree from that prefix.
+
 ## Backups
 
 Backups go through `BackupService` and never overwrite an existing target:
 
 - `create(targetPath)` — online SQLite backup to a new path, returning the file's SHA-256.
-- `exportJson(targetPath)` — all tables (`projects`, `events`, `timeline_nodes`, `timeline_edges`, `gates`, `evidence`, `approvals`, `runs`, `issues`, `notes`, `tags`, `note_tags`, `git_events`) as versioned JSON, written with mode `0600`.
+- `exportJson(targetPath)` — all tables as versioned JSON, written with mode `0600`.
 
 See [Troubleshooting]({% link docs/troubleshooting.md %}) for the recovery procedure.

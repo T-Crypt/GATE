@@ -4,6 +4,8 @@ title: Event log
 permalink: /docs/events/
 ---
 
+Commands, evidence, runs, and issue changes all land in one append-only event stream. The stream is the source of truth for the UI and the MCP interface alike.
+
 Events are append-only and ordered by `(project_id, sequence)`. Every command appends its event and updates the read model in the same transaction, so the stream is a complete, gap-free record of what happened.
 
 ## Record structure
@@ -40,4 +42,4 @@ The UI subscribes over WebSocket at `/ws?projectId=<id>&after=<sequence>`. On co
 
 ## Consumer guidance
 
-Consumers must ignore unknown event types and use `schema_version` when adding incompatible payloads.
+Consumers must ignore unknown event types and use `schema_version` when adding incompatible payloads — the stream grows without breaking older readers.

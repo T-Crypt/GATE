@@ -34,7 +34,7 @@ Verify the connection:
 claude mcp list
 ```
 
-Then ask Claude to list Gate projects (`project_list`) to confirm it can reach the server. The server identifies itself as `gate-mcp`; Claude Code surfaces its tools under that prefix (`mcp__gate-mcp__project_list` and so on). `npm run mcp` starts the same stdio server directly, which is useful for testing outside Claude Code.
+Then ask the agent to list Gate projects (`project_list`) to confirm it can reach the server. The server identifies itself as `gate-mcp`; Claude Code surfaces its tools under that prefix (`mcp__gate-mcp__project_list` and so on). `npm run mcp` starts the same stdio server directly, which is useful for testing outside Claude Code.
 
 ## Connect OpenCode
 
@@ -66,47 +66,44 @@ Both the MCP server and skills load at startup, so restart the agent after addin
 
 Every mutating tool requires an `idempotencyKey` (1–200 characters); retrying with the same key returns the original result instead of repeating the command. Read tools take no key. Mutating calls are recorded in the event log under the actor `mcp:local`, never as a human.
 
-Errors come back as `{ "error": { "code", "message" } }` on an error response, using the same codes as the HTTP API — see [Troubleshooting]({% link docs/troubleshooting.md %}).
+Errors come back as `{ "error": { "code", "message" } }`, using the same codes as the HTTP API — see [Troubleshooting]({% link docs/troubleshooting.md %}).
 
-### Projects
+### Read tools
 
-| Tool | Kind | Input | Description |
-| --- | --- | --- | --- |
-| `project_list` | read | — | List local Gate projects and their safety policy. |
+| Tool | Input | Description |
+| --- | --- | --- |
+| `project_list` | — | List local Gate projects and their safety policy. |
+| `timeline_get` | `projectId` | Read timeline nodes, dependency edges, and gates for a project. |
+| `run_get` | `runId` (UUID) | Read one run: branch, worktree, provider, status. |
+| `review_get` | `projectId` | Read gates, evidence, approvals, and recent runs for human review. |
+| `activity_feed` | `projectId`, optional `limit` (≤ 200) | Read recent timeline-driven runs and activity for a project, newest first. |
 
-### Timeline
+### Timeline tools
 
-| Tool | Kind | Input | Description |
-| --- | --- | --- | --- |
-| `timeline_get` | read | `projectId` | Read timeline nodes, dependency edges, and gates for a project. |
-| `timeline_draft` | mutation | `projectId`, `goal` (3–20,000 chars), `idempotencyKey` | Ask the configured provider to propose a timeline from a goal, without applying it. |
-| `timeline_accept_draft` | mutation | `projectId`, `draftId` (UUID), `idempotencyKey` | Accept one validated proposed timeline draft. |
-| `timeline_replace_draft` | mutation | `projectId`, `graph { nodes ≤ 2000, edges ≤ 5000, gates ≤ 5000 }`, `idempotencyKey` | Validate and replace editable timeline content while preserving protected (already-run) work. |
+| Tool | Input | Description |
+| --- | --- | --- |
+| `timeline_draft` | `projectId`, `goal` (3–20,000 chars) | Ask the configured provider to propose a timeline from a goal, without applying it. |
+| `timeline_accept_draft` | `projectId`, `draftId` (UUID) | Accept one validated proposed timeline draft. |
+| `timeline_replace_draft` | `projectId`, `graph { nodes ≤ 2000, edges ≤ 5000, gates ≤ 5000 }` | Validate and replace editable timeline content while preserving protected (already-run) work. |
 
-### Execution
+### Execution tools
 
-| Tool | Kind | Input | Description |
-| --- | --- | --- | --- |
-| `step_start` | mutation | `projectId`, `nodeId`, `idempotencyKey` | Start one ready timeline step in its isolated run worktree. |
-| `step_schedule` | mutation | `projectId`, `idempotencyKey` | Start the next dependency-ready step, when the project's interaction level allows it. |
-| `step_cancel` | mutation | `runId` (UUID), `idempotencyKey` | Cancel an active provider run without deleting its worktree. |
-| `run_get` | read | `runId` (UUID) | Read one run: branch, worktree, provider, status. |
-| `activity_feed` | read | `projectId`, optional `limit` (≤ 200) | Read recent timeline-driven runs and activity for a project, newest first. |
+| Tool | Input | Description |
+| --- | --- | --- |
+| `step_start` | `projectId`, `nodeId` | Start one ready timeline step in its isolated run worktree. |
+| `step_schedule` | `projectId` | Start the next dependency-ready step, when the project's interaction level allows it. |
+| `step_cancel` | `runId` (UUID) | Cancel an active provider run without deleting its worktree. |
 
-### Review and gates
+### Evidence and issues
 
-| Tool | Kind | Input | Description |
-| --- | --- | --- | --- |
-| `review_get` | read | `projectId` | Read gates, evidence, approvals, and recent runs for human review. |
-| `gate_submit_evidence` | mutation | `projectId`, `gateId`, `kind`, `headSha`, `fileScope[]` (≤ 250 paths), optional `command`, `exitCode`, `output` (≤ 100,000 chars), `artifactPath`, `idempotencyKey` | Attach commit-bound local evidence — test output, build result, screenshot path — to a gate. |
+| Tool | Input | Description |
+| --- | --- | --- |
+| `gate_submit_evidence` | `projectId`, `gateId`, `kind`, `headSha`, `fileScope[]` (≤ 250 paths), optional `command`, `exitCode`, `output` (≤ 100,000 chars), `artifactPath` | Attach commit-bound local evidence — test output, build result, screenshot path — to a gate. |
+| `issue_create` | `projectId`, `title` (≤ 500 chars), optional `branch`, `kind` (`bug`, `feature`, or `task`) | Create a local issue, bug report, or feature request. |
+| `issue_update` | `projectId`, `issueId`, `status` (`open`, `in_progress`, or `closed`) | Change an issue's status. |
+| `note_create` | `projectId`, `body` (≤ 10,000 chars), optional `tags[]` (≤ 30 tags) | Record a local project note, optionally tagged. |
 
-### Issues and notes
-
-| Tool | Kind | Input | Description |
-| --- | --- | --- | --- |
-| `issue_create` | mutation | `projectId`, `title` (≤ 500 chars), optional `branch`, `kind` (`bug`, `feature`, or `task`), `idempotencyKey` | Create a local issue, bug report, or feature request. |
-| `issue_update` | mutation | `projectId`, `issueId`, `status` (`open`, `in_progress`, or `closed`), `idempotencyKey` | Change an issue's status. |
-| `note_create` | mutation | `projectId`, `body` (≤ 10,000 chars), optional `tags[]` (≤ 30 tags), `idempotencyKey` | Record a local project note, optionally tagged. |
+Every tool above takes `idempotencyKey` for mutations (read tools take none).
 
 ## What is deliberately absent
 

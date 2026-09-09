@@ -5,80 +5,80 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% if page.title and page.title != site.title %}{{ page.title }} — {{ site.title }}{% else %}{{ site.title }}{% endif %}</title>
   <meta name="description" content="{{ page.description | default: site.description }}">
-  <meta name="theme-color" content="#0a0b0c">
+  <meta name="theme-color" content="{{ page.accent | default: '#08090b' }}">
   <link rel="icon" type="image/svg+xml" href="{{ site.baseurl }}/favicon.svg">
   <link rel="stylesheet" href="{{ site.baseurl }}/css/gate.css">
+  <script>
+    // Set the saved accent (or default) before first paint to avoid a flash.
+    (function () {
+      var names = ['gate', 'signal', 'violet', 'safety'];
+      var saved = null;
+      try { saved = localStorage.getItem('gate-accent'); } catch (e) {}
+      var accent = names.indexOf(saved) === -1 ? names[0] : saved;
+      document.documentElement.dataset.accent = accent;
+    })();
+  </script>
 </head>
-<body>
+<body{% if page.home %} class="home"{% endif %}{% if page.url contains "/docs/" %} class="docs"{% endif %}>
+  <a class="skip-link" href="#content">Skip to content</a>
 
-<header class="nav">
-  <div class="wrap">
-    <a class="brand" href="{{ site.baseurl }}/" aria-label="Gate — overview"><span class="gate-mark" aria-hidden="true"></span>GATE</a>
-    <nav class="nav-links" aria-label="Primary">
-      {% for item in site.nav_list %}
-      <a href="{{ item.url }}"{% if page.permalink == item.url %} class="on" aria-current="page"{% endif %}>{{ item.title }}</a>
-      {% endfor %}
-    </nav>
-    <a class="nav-gh" href="https://github.com/{{ site.repository }}">GitHub</a>
-  </div>
-</header>
-
-<main class="wrap">
-  <header class="page-head">
-    {% if page.url contains '/docs/' %}
-    <p class="kicker">documentation / {{ page.title | downcase }}</p>
-    {% elsif page.url contains '/404' %}
-    <p class="kicker">error / 404</p>
-    {% else %}
-    <p class="kicker">local control plane</p>
-    {% endif %}
-    <h1>{{ page.title | default: site.title }}</h1>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="{{ site.baseurl }}/" aria-label="Gate — overview">
+        <span class="gate-mark" aria-hidden="true"></span>GATE
+      </a>
+      <nav class="nav-main" id="site-nav" aria-label="Primary">
+        {% for item in site.nav_main %}
+          {% if item.url contains "http" %}
+            <a href="{{ item.url }}" target="_blank" rel="noopener">{{ item.title }} <span class="external" aria-hidden="true">&#8599;</span></a>
+          {% elsif page.url == item.url %}
+            <a href="{{ site.baseurl }}{{ item.url }}" class="on" aria-current="page">{{ item.title }}</a>
+          {% else %}
+            <a href="{{ site.baseurl }}{{ item.url }}">{{ item.title }}</a>
+          {% endif %}
+        {% endfor %}
+        <button class="accent-toggle" type="button" aria-label="Change accent color" title="Change accent color">accent</button>
+      </nav>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="Toggle navigation">menu</button>
+    </div>
   </header>
 
-  <nav class="sec-index" aria-label="Sections on this page"></nav>
+  <main id="content" class="docs-shell">
+    {% if page.layout == "default" and page.url contains "/docs/" %}
+    <aside class="docs-rail" aria-label="Documentation sections">
+      <p class="eyebrow rail-eyebrow">Index</p>
+      <nav class="rail-nav">
+        {% for item in site.nav_docs %}
+          {% if page.url == item.url %}
+            <a href="{{ site.baseurl }}{{ item.url }}" class="on" aria-current="page">{{ item.title }}</a>
+          {% else %}
+            <a href="{{ site.baseurl }}{{ item.url }}">{{ item.title }}</a>
+          {% endif %}
+        {% endfor %}
+      </nav>
+    </aside>
+    {% endif %}
 
-  <div class="prose">
+    <article class="prose">
+      {% if page.url contains "/docs/" %}
+        <p class="eyebrow">{{ site.title }} / documentation / {{ page.title | downcase }}</p>
+      {% elsif page.url contains "/404" %}
+        <p class="eyebrow">error / 404</p>
+      {% else %}
+        <p class="eyebrow">local control plane</p>
+      {% endif %}
+      <h1>{{ page.title | default: site.title }}</h1>
+      <div class="prose-body">
 {{ content }}
-  </div>
-</main>
+      </div>
+    </article>
+  </main>
 
-<footer class="site-foot">
-  <div class="wrap">
-    <span class="f-brand"><span class="gate-mark" aria-hidden="true"></span>GATE</span>
-    <nav class="f-links" aria-label="Footer">
-      {% for item in site.nav_list %}
-      <a href="{{ item.url }}">{{ item.title }}</a>
-      {% endfor %}
-    </nav>
-    <span class="f-meta">&copy; {{ site.time | date: '%Y' }} {{ site.author.name }} &middot; <a href="https://github.com/{{ site.repository }}">source</a></span>
-  </div>
-</footer>
+  <footer>
+    <span><span class="gate-mark mini" aria-hidden="true"></span>GATE / {{ site.time | date: "%Y" }}</span>
+    <span>&copy; {{ site.time | date: "%Y" }} {{ site.author.name }} &middot; <a href="https://github.com/{{ site.repository }}">source</a></span>
+  </footer>
 
-<script>
-(function () {
-  var prose = document.querySelector('.prose');
-  var nav = document.querySelector('.sec-index');
-  if (!prose || !nav) return;
-  var heads = Array.prototype.slice.call(prose.querySelectorAll('h2'));
-  if (heads.length < 2) { nav.hidden = true; return; }
-  heads.forEach(function (h, i) { if (!h.id) h.id = 'sec-' + i; });
-  heads.forEach(function (h) {
-    var a = document.createElement('a');
-    a.href = '#' + h.id;
-    a.textContent = h.textContent;
-    nav.appendChild(a);
-  });
-  if (!('IntersectionObserver' in window)) return;
-  var links = Array.prototype.slice.call(nav.querySelectorAll('a'));
-  function mark(id) {
-    links.forEach(function (l) { l.classList.toggle('on', l.hash === '#' + id); });
-  }
-  var io = new IntersectionObserver(function (entries) {
-    entries.forEach(function (e) { if (e.isIntersecting) mark(e.target.id); });
-  }, { rootMargin: '-15% 0px -75% 0px', threshold: 0 });
-  heads.forEach(function (h) { io.observe(h); });
-})();
-</script>
-
+  <script src="{{ site.baseurl }}/js/site.js" defer></script>
 </body>
 </html>
