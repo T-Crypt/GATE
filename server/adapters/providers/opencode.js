@@ -103,7 +103,36 @@ export class OpenCodeProvider {
   }
 
   capabilities() {
-    return { streaming: true, resume: false, structuredDrafts: true };
+    return { streaming: true, resume: false, structuredDrafts: true, modelDiscovery: true };
+  }
+
+  // `opencode models` prints the ids this install can actually reach, one per
+  // line. Read them rather than hardcoding a list that drifts.
+  async listModels() {
+    const chunks = [];
+    let result;
+    try {
+      const running = await this.runner.start(
+        {
+          executable: this.executable,
+          args: ['models'],
+          env: process.env,
+          outputLimitBytes: 256_000
+        },
+        { onOutput: (chunk, stream) => (stream === 'stdout' ? chunks.push(chunk) : null) }
+      );
+      result = await running.completion;
+    } catch {
+      return { authenticated: false, models: [] };
+    }
+    if (result.exitCode !== 0) return { authenticated: false, models: [] };
+    const models = chunks
+      .join('')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !line.includes(' '))
+      .map((id) => ({ id, label: id === DEFAULT_MODEL ? `${id} — default` : id }));
+    return { authenticated: models.length > 0, models };
   }
 
   async start(request, observer) {

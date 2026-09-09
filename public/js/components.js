@@ -46,3 +46,21 @@ export function openDialog({ label, content, className = '', onMount }) {
   onMount?.(dialog);
   return dialog;
 }
+
+// Model ids are typed nowhere in Gate: each adapter reports what its harness
+// can actually reach, and the user picks from that. A hand-typed id only fails
+// ~30s later at draft time, with an error that names nothing useful.
+export function modelSelectOptions(catalog, selected) {
+  const options = [`<option value="" ${selected ? '' : 'selected'}>Provider default</option>`];
+  for (const model of catalog.models) {
+    options.push(
+      `<option value="${escapeHtml(model.id)}" ${model.id === selected ? 'selected' : ''}>${escapeHtml(model.label || model.id)}</option>`
+    );
+  }
+  // Never silently drop a configured value we no longer recognise — show it,
+  // marked, so the user can see what is set and why it may be failing.
+  if (selected && !catalog.models.some((model) => model.id === selected)) {
+    options.push(`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)} — unavailable</option>`);
+  }
+  return options.join('');
+}

@@ -31,6 +31,20 @@ async function createProject(request, key, name) {
   return (await created.json()).data;
 }
 
+// The model list comes from whichever harness CLI is installed on the machine
+// running the tests. Stub it so these assertions describe Gate's behaviour
+// rather than the box's toolchain.
+async function stubModels(page, models) {
+  await page.route('**/api/v1/providers/*/models', async (route) => {
+    const kind = new URL(route.request().url()).pathname.split('/').at(-2);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { kind, authenticated: true, models }, meta: { apiVersion: 'v1' } })
+    });
+  });
+}
+
 test('onboards a project and exposes keyboard-first workstation navigation', async ({ page }) => {
   const browserErrors = [];
   page.on('pageerror', (error) => browserErrors.push(error.message));
@@ -149,19 +163,37 @@ test('project settings persist lifecycle stage and expose managed instructions',
   await expect(page.getByText('Managed GATE contract')).toBeVisible();
 });
 
-test('can switch the provider backend from settings', async ({ page, request }) => {
+test('can switch the provider backend and pick a model the harness reports', async ({ page, request }) => {
   const project = await ensureProject(request);
+  await stubModels(page, [{ id: 'opencode/big-pickle', label: 'opencode/big-pickle — default' }]);
   await page.goto('/#/settings');
   await page.getByLabel('Active project').selectOption(String(project.id));
   await page.getByLabel('Backend provider').selectOption('opencode');
-  await page.getByLabel('Model').fill('opencode/big-pickle');
+  // The model field is a picker, never free text — a typed id only fails much
+  // later, at draft time.
+  await expect(page.getByLabel('Model')).toHaveJSProperty('tagName', 'SELECT');
+  await page.getByLabel('Model').selectOption('opencode/big-pickle');
   await page.getByRole('button', { name: 'Save provider' }).click();
   await expect(page.getByLabel('Backend provider')).toHaveValue('opencode');
   await expect(page.getByLabel('Model')).toHaveValue('opencode/big-pickle');
 });
 
+test('a configured model the harness cannot reach is shown as unavailable', async ({ page, request }) => {
+  const project = await createProject(request, 'browser-stale-model', 'Stale model');
+  await request.patch(`/api/v1/projects/${project.id}/provider`, {
+    headers: { 'Idempotency-Key': 'browser-stale-model-provider' },
+    data: { providerKind: 'claude', providerConfig: { model: 'Sonnet 5' } }
+  });
+  await stubModels(page, [{ id: 'sonnet', label: 'Sonnet — balanced' }]);
+  await page.goto('/#/settings');
+  await page.getByLabel('Active project').selectOption(String(project.id));
+  await expect(page.getByLabel('Model')).toHaveValue('Sonnet 5');
+  await expect(page.locator('#providerModelSetting option[selected]')).toContainText('unavailable');
+});
+
 test('timeline draft form preselects the OpenCode default model', async ({ page, request }) => {
   const project = await ensureProject(request);
+  await stubModels(page, [{ id: 'opencode/big-pickle', label: 'opencode/big-pickle — default' }]);
   await request.patch(`/api/v1/projects/${project.id}/provider`, {
     headers: { 'Idempotency-Key': 'browser-provider-opencode' },
     data: { providerKind: 'opencode', providerConfig: { model: 'opencode/big-pickle' } }

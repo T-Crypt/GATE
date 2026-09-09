@@ -1,4 +1,4 @@
-import { escapeHtml, providerModelDefault, providerName, showToast } from './components.js';
+import { escapeHtml, modelSelectOptions, providerModelDefault, providerName, showToast } from './components.js';
 import { applyAccent, getAccent } from './theme.js';
 
 const ACCENTS = [
@@ -13,6 +13,9 @@ const ACCENTS = [
 
 export async function initSettings(container, { project, api, onProjectChanged }) {
   const protectedBranches = new Set(project.protectedBranches);
+  const modelCatalog = await api
+    .listProviderModels(project.providerKind)
+    .catch(() => ({ authenticated: false, models: [] }));
   const activeAccent = getAccent();
   let instruction = await api.getInstruction(project.id, 'AGENTS.md').catch(() => ({
     fileName: 'AGENTS.md', status: 'missing', userContent: '', managedContent: ''
@@ -24,7 +27,7 @@ export async function initSettings(container, { project, api, onProjectChanged }
       <article class="panel settings-card"><div class="panel-header"><div><p class="eyebrow">Human control</p><h2>Interaction level</h2></div></div><div class="panel-body field"><label for="interactionLevel">Agent autonomy</label><select id="interactionLevel"><option value="observe" ${project.interactionLevel === 'observe' ? 'selected' : ''}>Observe only</option><option value="assist" ${project.interactionLevel === 'assist' ? 'selected' : ''}>Assist with approvals</option><option value="automatic" ${project.interactionLevel === 'automatic' ? 'selected' : ''}>Automatic inside gates</option><option value="custom" ${project.interactionLevel === 'custom' ? 'selected' : ''}>Custom policy</option></select><span class="field-hint">Even automatic mode stops at human gates and never integrates branches.</span></div></article>
       <form class="panel settings-card" id="stageForm"><div class="panel-header"><div><p class="eyebrow">Project lifecycle</p><h2>Project stage</h2></div><span class="badge">${escapeHtml(project.stage || 'active')}</span></div><div class="panel-body field"><label for="projectStage">Project stage</label><select id="projectStage"><option value="greenfield" ${project.stage === 'greenfield' ? 'selected' : ''}>New Project</option><option value="active" ${project.stage === 'active' || !project.stage ? 'selected' : ''}>Active Development</option><option value="maintenance" ${project.stage === 'maintenance' ? 'selected' : ''}>Maintenance / Production</option></select><span class="field-hint">Stages change planning emphasis; they never weaken human approval or protected-branch controls.</span><button class="button primary" type="submit">Save project stage</button></div></form>
 <article class="panel settings-card"><div class="panel-header"><div><p class="eyebrow">Release refs</p><h2>Stable and production</h2></div></div><div class="panel-body form-grid"><div class="field"><label for="stableBranchSetting">Stable branch</label><input id="stableBranchSetting" value="${escapeHtml(project.stableBranch || '')}" placeholder="stable"></div><div class="field"><label for="productionBranchSetting">Production branch</label><input id="productionBranchSetting" value="${escapeHtml(project.productionBranch || '')}" placeholder="production"></div><div class="field"><label for="branchPrefixSetting">Branch naming prefix</label><input id="branchPrefixSetting" value="${escapeHtml(project.branchPrefix || 'work/gate-')}" maxlength="250"><span class="field-hint">Prefix for every isolated run branch, e.g. <code>work/gate-&lt;run&gt;</code>.</span></div><button class="button primary" type="submit">Save safety policy</button></div></article>
-      <form class="panel settings-card" id="providerForm"><div class="panel-header"><div><p class="eyebrow">Provider adapter</p><h2>Agent backend</h2></div><span class="badge">${escapeHtml(project.providerKind)}</span></div><div class="panel-body"><div class="form-grid"><div class="field"><label for="providerKindSetting">Backend provider</label><select id="providerKindSetting"><option value="claude" ${project.providerKind === 'claude' ? 'selected' : ''}>Claude Code</option><option value="opencode" ${project.providerKind === 'opencode' ? 'selected' : ''}>OpenCode</option></select></div><div class="field"><label for="providerModelSetting">Model</label><input id="providerModelSetting" value="${escapeHtml(project.providerConfig.model || '')}" placeholder="${escapeHtml(providerModelDefault(project.providerKind))}"><span class="field-hint">Blank uses the provider's default. OpenCode can draft with e.g. <code>opencode/big-pickle</code>.</span></div></div><dl class="settings-facts"><div><dt>Repository</dt><dd>${escapeHtml(project.repoPath)}</dd></div><div><dt>Base</dt><dd>${escapeHtml(project.baseBranch)}</dd></div><div><dt>Storage</dt><dd>Local SQLite + event log</dd></div><div><dt>Telemetry</dt><dd>None</dd></div></dl><button class="button primary" type="submit">Save provider</button></div></form>
+      <form class="panel settings-card" id="providerForm"><div class="panel-header"><div><p class="eyebrow">Provider adapter</p><h2>Agent backend</h2></div><span class="badge">${escapeHtml(project.providerKind)}</span></div><div class="panel-body"><div class="form-grid"><div class="field"><label for="providerKindSetting">Backend provider</label><select id="providerKindSetting"><option value="claude" ${project.providerKind === 'claude' ? 'selected' : ''}>Claude Code</option><option value="opencode" ${project.providerKind === 'opencode' ? 'selected' : ''}>OpenCode</option></select></div><div class="field"><label for="providerModelSetting">Model</label><select id="providerModelSetting">${modelSelectOptions(modelCatalog, project.providerConfig.model || '')}</select><span class="field-hint" id="providerModelHint">${modelCatalog.models.length ? `Reported by ${escapeHtml(providerName(project.providerKind))} on this machine. Blank uses ${escapeHtml(providerModelDefault(project.providerKind))}.` : `${escapeHtml(providerName(project.providerKind))} reported no models — check that it is installed and signed in.`}</span></div></div><dl class="settings-facts"><div><dt>Repository</dt><dd>${escapeHtml(project.repoPath)}</dd></div><div><dt>Base</dt><dd>${escapeHtml(project.baseBranch)}</dd></div><div><dt>Storage</dt><dd>Local SQLite + event log</dd></div><div><dt>Telemetry</dt><dd>None</dd></div></dl><button class="button primary" type="submit">Save provider</button></div></form>
       <form class="panel settings-card settings-wide" id="instructionsForm"><div class="panel-header"><div><p class="eyebrow">Project-local rules</p><h2>Project instructions</h2></div><span class="badge" id="instructionStatus">${escapeHtml(instruction.status)}</span></div><div class="panel-body form-grid"><div class="field"><label for="instructionFile">Instruction file</label><select id="instructionFile"><option value="AGENTS.md">AGENTS.md</option><option value="CLAUDE.md">CLAUDE.md</option></select><span class="field-hint">GATE preserves the editable user block and replaces only its managed contract block.</span></div><div class="field"><label for="instructionUserContent">User project instructions</label><textarea id="instructionUserContent" rows="12" maxlength="100000" spellcheck="false">${escapeHtml(instruction.userContent || '')}</textarea></div><div class="field"><label for="instructionManagedContent">Managed GATE contract</label><textarea id="instructionManagedContent" rows="9" readonly aria-label="Managed GATE contract">${escapeHtml(instruction.managedContent || '')}</textarea><span class="field-hint" id="instructionHint">${instruction.status === 'corrupt' ? 'External marker corruption detected. Saving repairs the managed structure using the editable content above.' : 'This block is generated and locked to preserve GATE safety rules.'}</span></div><button class="button primary" type="submit" id="saveInstructions">${instruction.status === 'corrupt' ? 'Repair instruction file' : 'Save instructions'}</button></div></form>
     </div>`;
   container.querySelectorAll('[data-accent-choice]').forEach((button) => button.addEventListener('click', () => {
@@ -67,9 +70,19 @@ export async function initSettings(container, { project, api, onProjectChanged }
       showToast(error.message, 'error');
     }
   });
-  container.querySelector('#providerKindSetting').addEventListener('change', (event) => {
-    const input = container.querySelector('#providerModelSetting');
-    if (!input.value) input.placeholder = providerModelDefault(event.target.value);
+  container.querySelector('#providerKindSetting').addEventListener('change', async (event) => {
+    // Each backend reaches a different set of models, so the list has to follow
+    // the selected provider rather than stay on the one loaded at render time.
+    const kind = event.target.value;
+    const select = container.querySelector('#providerModelSetting');
+    const hint = container.querySelector('#providerModelHint');
+    select.disabled = true;
+    const catalog = await api.listProviderModels(kind).catch(() => ({ authenticated: false, models: [] }));
+    select.innerHTML = modelSelectOptions(catalog, kind === project.providerKind ? project.providerConfig.model || '' : '');
+    hint.textContent = catalog.models.length
+      ? `Reported by ${providerName(kind)} on this machine. Blank uses ${providerModelDefault(kind)}.`
+      : `${providerName(kind)} reported no models — check that it is installed and signed in.`;
+    select.disabled = false;
   });
   async function loadInstruction(fileName) {
     try {
