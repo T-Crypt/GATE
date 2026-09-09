@@ -49,6 +49,11 @@ test('MCP exposes compact timeline and review tools', async () => {
     assert.ok(names.includes('issue_update'));
     assert.ok(names.includes('note_create'));
     assert.ok(names.includes('activity_feed'));
+    assert.ok(names.includes('memory_status'));
+    assert.ok(names.includes('memory_search'));
+    assert.ok(names.includes('memory_neighbors'));
+    assert.ok(names.includes('memory_impact'));
+    assert.ok(names.includes('memory_refresh'));
     assert.equal(names.includes('gate_decide'), false);
 
     const result = await fixture.client.callTool({

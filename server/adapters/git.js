@@ -199,6 +199,11 @@ export class GitAdapter {
     return output ? output.split('\n').filter(Boolean) : [];
   }
 
+  async changedFilesBetween(repoPath, fromSha, toSha = 'HEAD') {
+    const output = await git(repoPath, ['diff', '--name-only', `${fromSha}...${toSha}`]);
+    return output ? output.split('\n').filter(Boolean) : [];
+  }
+
   async fileTree(repoPath, { ref = 'HEAD', maxEntries = 500 } = {}) {
     let output;
     try {

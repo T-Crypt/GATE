@@ -6,6 +6,8 @@ import { createApp } from '../../server/app.js';
 import { EventStore } from '../../server/application/event-store.js';
 import { InstructionService } from '../../server/application/instruction-service.js';
 import { ProjectService } from '../../server/application/project-service.js';
+import { MemoryService } from '../../server/application/memory-service.js';
+import { GitAdapter } from '../../server/adapters/git.js';
 import { TimelineService } from '../../server/application/timeline-service.js';
 import { createTestDatabase } from '../helpers/database.js';
 import { createGitFixture } from '../helpers/git.js';
@@ -14,12 +16,15 @@ function setup() {
   const database = createTestDatabase();
   const events = new EventStore(database.db);
   const projects = new ProjectService(database.db, events);
+  const git = new GitAdapter();
+  const memory = new MemoryService({ db: database.db, projects, gitAdapter: git, eventStore: events });
   const timeline = new TimelineService(database.db, events);
   const instructions = new InstructionService({ db: database.db, projects, eventStore: events });
   const services = {
     events,
     projects,
     instructions,
+    memory,
     timeline,
     execution: {
       list: () => [],
@@ -134,6 +139,32 @@ test('project stage and managed instructions are available through guarded proje
     assert.equal(saved.status, 200);
     assert.equal(saved.body.data.status, 'valid');
     assert.match(saved.body.data.content, /GATE:MANAGED:START/);
+  } finally {
+    fixture.close();
+    gitFixture.close();
+  }
+});
+
+test('memory routes refresh and search the local file graph', async () => {
+  const gitFixture = createGitFixture();
+  const fixture = setup();
+  try {
+    const created = await request(fixture.app)
+      .post('/api/v1/projects')
+      .set('Idempotency-Key', 'create-memory-project')
+      .send({ name: 'Memory project', repoPath: gitFixture.repoPath, baseBranch: 'main' });
+    const projectId = created.body.data.id;
+
+    const refreshed = await request(fixture.app)
+      .post(`/api/v1/projects/${projectId}/memory/refresh`)
+      .set('Idempotency-Key', 'refresh-memory-project')
+      .send({ force: true });
+    assert.equal(refreshed.status, 200);
+    assert.equal(refreshed.body.data.mode, 'full');
+
+    const search = await request(fixture.app).get(`/api/v1/projects/${projectId}/memory/search?q=README`);
+    assert.equal(search.status, 200);
+    assert.ok(search.body.data.items.some((item) => item.path === 'README.md'));
   } finally {
     fixture.close();
     gitFixture.close();

@@ -4,6 +4,7 @@ import { initActivity } from './activity.js';
 import { emptyState, escapeHtml, openDialog, showToast } from './components.js';
 import { initGit } from './git.js';
 import { initIssues } from './issues.js';
+import { initMemory } from './memory.js';
 import { initOverview } from './overview.js';
 import { initReviews } from './reviews.js';
 import { initSettings } from './settings.js';
@@ -21,6 +22,7 @@ let reconnectTimer = null;
 const routes = [
   ['overview', 'OV', 'Overview'],
   ['timeline', 'TL', 'Timeline'],
+  ['memory', 'MM', 'Memory'],
   ['agent', 'AI', 'Agent'],
   ['activity', 'AC', 'Activity'],
   ['issues', 'IS', 'Issues'],
@@ -97,6 +99,7 @@ function renderView() {
   const definitions = {
     overview: ['Project signal', 'Project overview', 'Execution, review, and repository health at a glance.'],
     timeline: ['Guided execution', 'Interactive timeline', 'Milestones, dependencies, code gates, visual gates, and approvals.'],
+    memory: ['Project intelligence', 'Memory', 'Local file graph, repository revision, and deterministic impact previews.'],
     agent: [providerName(activeProject(state).providerKind), 'Agent control', 'Observe current intent, streamed output, and bounded execution.'],
     activity: ['Run history', 'Activity', 'Every timeline-driven run against this project, with status and output.'],
     issues: ['Local tracking', 'Issues', 'Small work items linked to branches and timeline context.'],
@@ -110,6 +113,8 @@ function renderView() {
   const project = activeProject(state);
   if (state.route === 'timeline') {
     void initTimeline(content, { project, api, onRunChanged: async () => refreshActivity() });
+  } else if (state.route === 'memory') {
+    void initMemory(content, { project, api });
   } else if (state.route === 'agent') {
     void initAgent(content, { project, api });
   } else if (state.route === 'activity') {
@@ -181,6 +186,7 @@ function openOnboarding() {
         button.disabled = true;
         try {
           const project = await api.createProject(values);
+          void api.refreshMemory(project.id, { force: true }).catch(() => undefined);
           const projects = await api.listProjects();
           updateState({ projects, projectId: project.id });
           dialog.close();

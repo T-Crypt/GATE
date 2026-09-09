@@ -236,4 +236,65 @@ export function registerTools(server, services) {
     },
     handler(({ projectId: id, limit }) => services.execution.activityFeed(id, limit))
   );
+
+  server.registerTool(
+    'memory_status',
+    {
+      description: 'Read the local GATE Memory revision, staleness, and file graph counts.',
+      inputSchema: { projectId },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id }) => services.memory.status(id))
+  );
+
+  server.registerTool(
+    'memory_search',
+    {
+      description: 'Search the local file graph by path or filename. Results retain filesystem provenance.',
+      inputSchema: {
+        projectId,
+        query: z.string().trim().min(1).max(500),
+        limit: z.number().int().positive().max(100).optional(),
+        type: z.enum(['file', 'directory', 'repository']).optional()
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, ...input }) => services.memory.search(id, input))
+  );
+
+  server.registerTool(
+    'memory_neighbors',
+    {
+      description: 'Traverse the deterministic local file graph around a memory node.',
+      inputSchema: {
+        projectId,
+        nodeId: z.string().trim().min(1).max(500),
+        depth: z.number().int().positive().max(4).optional()
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, nodeId, depth }) => services.memory.neighbors(id, nodeId, { depth }))
+  );
+
+  server.registerTool(
+    'memory_impact',
+    {
+      description: 'Find file-level graph matches and direct structural neighbors for an impact preview.',
+      inputSchema: { projectId, query: z.string().trim().min(1).max(500), limit: z.number().int().positive().max(25).optional() },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, ...input }) => services.memory.impact(id, input))
+  );
+
+  server.registerTool(
+    'memory_refresh',
+    {
+      description: 'Refresh GATE Memory from the local Git repository. The mutation is idempotent.',
+      inputSchema: { projectId, force: z.boolean().optional(), idempotencyKey },
+      annotations: { idempotentHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, idempotencyKey: key, force = false }) =>
+      services.memory.refresh(id, { force }, actorContext(key))
+    )
+  );
 }
