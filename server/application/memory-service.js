@@ -9,6 +9,7 @@ function decodeNode(row) {
     projectId: row.project_id,
     type: row.node_type,
     path: row.path,
+    sourcePath: row.source_path,
     name: row.name,
     contentHash: row.content_hash,
     metadata: JSON.parse(row.metadata_json),
@@ -51,16 +52,17 @@ export class MemoryService {
     const counts = this.db.prepare(
       `SELECT
          (SELECT COUNT(*) FROM memory_nodes WHERE project_id = ? AND node_type = 'file') AS files,
+         (SELECT COUNT(*) FROM memory_nodes WHERE project_id = ? AND node_type = 'symbol') AS symbols,
          (SELECT COUNT(*) FROM memory_nodes WHERE project_id = ?) AS nodes,
          (SELECT COUNT(*) FROM memory_edges WHERE project_id = ?) AS edges`
-    ).get(projectId, projectId, projectId);
+    ).get(projectId, projectId, projectId, projectId);
     return {
       projectId,
       state: revision?.status || 'unindexed',
       repositorySha: inspected.headSha,
       indexedSha: revision?.repository_sha || null,
       stale: !revision || revision.repository_sha !== inspected.headSha,
-      qualityLevel: revision ? 1 : 0,
+      qualityLevel: counts.symbols > 0 ? 2 : revision ? 1 : 0,
       counts,
       indexedAt: revision?.indexed_at || null,
       lastError: revision?.last_error || null
