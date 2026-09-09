@@ -30,7 +30,18 @@ Verify the connection:
 claude mcp list
 ```
 
-Then ask Claude to list Gate projects (`project_list`) to confirm it can reach the server. `npm run mcp` also starts the same server directly, useful for testing outside Claude Code.
+Then ask Claude to list Gate projects (`project_list`) to confirm it can reach the server. The server identifies itself as `gate-mcp`; Claude Code surfaces its tools under that prefix (`mcp__gate-mcp__project_list` and so on). `npm run mcp` also starts the same server directly, useful for testing outside Claude Code.
+
+## The Gate skill
+
+Registering the server tells an agent *what it can do*; the skill tells it *how to work the board* — use the Gate MCP tools for every read and write rather than the CLI or hand-editing `.gate/`, keep timelines dependency-aware, submit commit-bound evidence to gates, and never attempt to approve its own work. Gate's skill lives at [`.claude/skills/gate/SKILL.md`](../.claude/skills/gate/SKILL.md). Copy it into a connected project's `.claude/skills/` and trim rules that don't apply there:
+
+```bash
+mkdir -p .claude/skills/gate
+cp /path/to/gate/.claude/skills/gate/SKILL.md .claude/skills/gate/SKILL.md
+```
+
+Both the MCP server and skills load at startup, so restart Claude Code after adding either.
 
 ## Tools
 
