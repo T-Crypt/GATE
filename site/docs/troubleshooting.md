@@ -4,6 +4,8 @@ title: Troubleshooting
 permalink: /docs/troubleshooting/
 ---
 
+Error codes, interrupted runs, and the recovery procedure for the local database.
+
 ## Health endpoints
 
 - `GET /health` — proves the process responds.

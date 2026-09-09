@@ -7,19 +7,24 @@ author:
   name: Trevin Tindall
   github: T-Crypt
 
-# Navigation links (paths include the project-page baseurl)
-nav_list:
+# Top-right navigation (one-line items, no trailing slash added in markup)
+nav_main:
   - title: Overview
-    url: /GATE/
-  - title: Setup
-    url: /GATE/docs/setup/
+    url: /
+  - title: GitHub
+    url: https://github.com/T-Crypt/GATE
+
+# Documentation sidebar rail, shown on every docs page
+nav_docs:
+  - title: Setup & Operations
+    url: /docs/setup/
   - title: Architecture
-    url: /GATE/docs/architecture/
-  - title: Providers
-    url: /GATE/docs/providers/
-  - title: MCP
-    url: /GATE/docs/mcp/
-  - title: Events
-    url: /GATE/docs/events/
+    url: /docs/architecture/
+  - title: Provider adapters
+    url: /docs/providers/
+  - title: MCP interface
+    url: /docs/mcp/
+  - title: Event log
+    url: /docs/events/
   - title: Troubleshooting
-    url: /GATE/docs/troubleshooting/
+    url: /docs/troubleshooting/
