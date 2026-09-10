@@ -85,20 +85,28 @@ export const timelineContractPrompt = [
   '  - milestone nodes set parentId to null.',
   '',
   `edges[]: { "fromNodeId": string, "toNodeId": string, "type": one of ${EDGE_TYPES.join(' | ')} }`,
-  '  - fromNodeId and toNodeId must be node ids that exist in nodes[].',
+  '  - fromNodeId and toNodeId must both be ids from nodes[]. Nothing else is a',
+  '    valid endpoint — not a gate, not a key, not an invented id.',
+  '  - the *_gate edge types still join two nodes; they describe why the',
+  '    dependency exists, they do not point at a gate.',
   '  - the edge set must be acyclic.',
   '',
   `gates[]: { "nodeId": string, "type": one of ${GATE_KINDS.join(' | ')}, "title": string,`,
   '  "blocking": boolean, "requiredEvidence": string[] }',
-  '  - nodeId must be a node id that exists in nodes[].'
+  '  - a gate is not a node. Gates are attached to a node through nodeId and',
+  '    must never be given an id of their own in nodes[] or referenced in edges[].',
+  '  - nodeId must be an id from nodes[].'
 ].join('\n');
 
-export function buildTimelinePrompt({ goal, repositoryContext }) {
+export function buildTimelinePrompt({ goal, repositoryContext, feedback }) {
   return [
     'Create a concise implementation timeline for the following local repository goal.',
     'Return milestones and executable steps. Add code, test, visual, or approval gates where evidence is required.',
     `Goal: ${goal}`,
     `Repository context: ${repositoryContext || 'No additional context supplied.'}`,
-    timelineContractPrompt
+    timelineContractPrompt,
+    ...(feedback
+      ? [`A previous attempt was rejected: ${feedback}\nReturn a corrected timeline that satisfies the contract above.`]
+      : [])
   ].join('\n\n');
 }

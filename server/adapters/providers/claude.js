@@ -129,9 +129,9 @@ export class ClaudeProvider {
     return { sessionId, completion: running.completion, cancel: running.cancel };
   }
 
-  async draftTimeline({ goal, repositoryContext, cwd, model, env }) {
+  async draftTimeline({ goal, repositoryContext, cwd, model, env, feedback }) {
     const chunks = [];
-    const prompt = buildTimelinePrompt({ goal, repositoryContext });
+    const prompt = buildTimelinePrompt({ goal, repositoryContext, feedback });
     const running = await this.runner.start(
       {
         executable: this.executable,

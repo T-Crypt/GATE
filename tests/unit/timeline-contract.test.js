@@ -50,3 +50,23 @@ test('the prose contract names the same fields for providers without schema supp
   assert.ok(prompt.includes('Repository context: ctx'));
   assert.ok(prompt.includes(timelineContractPrompt));
 });
+
+test('the contract tells providers that gates are not edge endpoints', () => {
+  // A real draft failed with DANGLING_EDGE after pointing a code_gate edge at a
+  // gate id; the *_gate edge names invite exactly that confusion.
+  assert.match(timelineContractPrompt, /a gate is not a node/i);
+  assert.match(timelineContractPrompt, /never be given an id of their own/i);
+  assert.match(timelineContractPrompt, /they do not point at a gate/i);
+});
+
+test('feedback from a rejected attempt is appended to the retry prompt', () => {
+  const plain = buildTimelinePrompt({ goal: 'g', repositoryContext: 'c' });
+  assert.ok(!plain.includes('previous attempt'));
+  const retry = buildTimelinePrompt({
+    goal: 'g',
+    repositoryContext: 'c',
+    feedback: 'Timeline edge references a missing node'
+  });
+  assert.ok(retry.includes('A previous attempt was rejected: Timeline edge references a missing node'));
+  assert.ok(retry.includes(timelineContractPrompt));
+});
