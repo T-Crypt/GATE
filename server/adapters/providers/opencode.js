@@ -79,7 +79,7 @@ export class OpenCodeProvider {
   // Declared so the provider roster can tell a user what a backend gives up
   // before they commit a project to it. Only what a caller actually consults
   // belongs here: resumption and model discovery were dropped because Gate
-  // resumes nothing (see AGENTS.md) and `listModels().complete` already says
+  // resumes nothing (see site/docs/providers.md) and `listModels().complete` already says
   // whether a catalog can be enumerated.
   //
   // `opencode run` has no schema flag — `--format json` frames events, not the

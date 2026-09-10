@@ -15,7 +15,7 @@ One Node process composes Express, WebSocket replay, scheduling, the static UI, 
 - The **domain** owns DAG, gate, and branch rules — the safety policy.
 - **Adapters** own Git, provider processes, HTTP, WebSocket, and MCP — the outside world.
 
-This boundary is what lets a new provider ship as just `start()` and `draftTimeline()` (see [Provider adapters]({% link docs/providers.md %})) without touching timeline or safety policy.
+This boundary is what lets a new provider ship as an adapter — `start()` and `draftTimeline()`, plus the optional `listModels()` and `capabilities()` hooks — without touching timeline or safety policy. `cli-support.js` carries the plumbing every CLI-backed adapter shares, so most of a new adapter is its argv and its event shape. Three places outside it still need the new kind: the provider map, the backend picker, and a display name. [Provider adapters]({% link docs/providers.md %}) lists them.
 
 ## Execution flow
 

@@ -58,13 +58,21 @@ Error codes, interrupted runs, and the recovery procedure for the local database
 
 | Code | Meaning and fix |
 | --- | --- |
-| `PROVIDER_UNAVAILABLE` | The project's provider is not registered or its CLI is not reachable. Install and authenticate the CLI for the project's `providerKind` (`claude`, `opencode`, `codex`, `gemini`, `cursor-agent`, or `copilot`), and confirm the configured model. |
-| `PROVIDER_LAUNCH_FAILED` | The provider process could not be spawned. Check the CLI executable and permissions. |
-| `PROVIDER_OUTPUT_INVALID` | The provider returned malformed output. Confirm the model supports structured output and retry the draft. |
-| `PROVIDER_OUTPUT_INCOMPLETE` | The provider returned an empty or truncated result. Re-draft (a retry often fixes transient truncation). |
-| `PROVIDER_FAILED` | The provider process exited with an error. Inspect the run output or stderr. |
-| `DRAFTING_UNSUPPORTED` | The configured provider cannot draft timelines. Pick a provider that supports `draftTimeline`. |
-| `UNKNOWN_PROVIDER` / `UNKNOWN_MODEL` | The provider kind or model is not recognized by the Settings catalog. Choose from the listed options. |
+| `PROVIDER_UNAVAILABLE` | The project's `providerKind` is not registered, or its CLI is not reachable. Install and sign in to the CLI for that kind — one of `claude`, `opencode`, `codex`, `gemini`, `cursor`, `copilot`. You should not have to meet this code by surprise: the Settings page shows which backends this machine can reach, and `GET /providers` returns the same roster. |
+| `PROVIDER_LAUNCH_FAILED` | The provider process could not be spawned — usually the executable is not on `PATH`. Check the CLI name and permissions. Drafts are not retried after this, because a retry cannot conjure a missing binary. |
+| `PROVIDER_OUTPUT_INVALID` | The provider answered with something that is not the timeline JSON — prose, a partial object, or a fence Gate could not unwrap. Four of the six adapters only get the contract as prose, so this is the ordinary way a draft misses. Gate already retries once with the reason fed back; meeting the code means the second attempt missed too. Rephrase the goal, or switch to `claude` or `codex`, which are handed a real schema. |
+| `PROVIDER_OUTPUT_INCOMPLETE` | The provider exited cleanly having produced no timeline, or an empty object. Also retried once automatically. |
+| `PROVIDER_FAILED` | The provider process exited non-zero. The message carries the CLI's own reason where it printed one — an unreachable model, an expired login, a rejected flag. Inspect the run output or stderr. Not retried. |
+| `DRAFTING_UNSUPPORTED` | The configured provider implements no `draftTimeline`. All six shipped adapters do, so this only appears behind a custom provider map. |
+| `UNKNOWN_PROVIDER` | No adapter is registered under that `providerKind`. |
+| `UNKNOWN_MODEL` | The model is absent from a catalog the CLI could fully enumerate — today only `opencode` and `cursor`. A provider reporting `complete: false` accepts any id, so this code cannot fire for it. |
+
+### Provider failure modes that are not error codes
+
+- **Codex writes a scratch directory.** Drafting creates a temporary directory under the OS temp dir (`gate-codex-*`) to hold the schema and the constrained answer, and removes it even when the CLI fails. A temp dir that is read-only or full makes drafting fail before Codex starts.
+- **A run whose output exceeds the cap is truncated, not failed.** Each adapter stops recording after `GATE_OUTPUT_LIMIT_BYTES` and marks the run truncated; the process keeps going.
+- **Cursor drafting is not sandboxed.** Cursor's print mode reaches read and write tools and Gate has no lever to prevent it, unlike Codex and OpenCode. See [Provider adapters]({% link docs/providers.md %}).
+- **Exit-code meanings are mostly undocumented.** Of the six CLIs, only success (`0`) and "non-zero means failure" are documented across the board. Gate therefore reports whatever the CLI printed rather than mapping a number to a cause, which is why `PROVIDER_FAILED` messages quote the CLI.
 
 ### Memory, context, and planning
 

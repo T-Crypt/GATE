@@ -4,7 +4,14 @@ title: MCP interface
 permalink: /docs/mcp/
 ---
 
-Gate runs the same application services over stdio for any MCP client, backed by the same SQLite database as the web UI. Today those clients are Claude Code and OpenCode; the tool surface has no provider-specific behavior in it, so any MCP-capable agent can connect the same way.
+Gate runs the same application services over stdio for any MCP client, backed by the same SQLite database as the web UI. The tool surface has no provider-specific behavior in it, so any MCP-capable agent connects the same way.
+
+Two roles are easy to conflate, and they are now clearly different sets:
+
+- An **MCP client** is an agent that connects *to* Gate and calls its tools — to read a timeline, submit evidence, or record a decision. Any MCP-capable agent can be one.
+- A **provider** is the adapter Gate schedules to *run* a step, chosen per project by `providerKind`. Six ship; see [Provider adapters]({% link docs/providers.md %}).
+
+They are independent. A project can be driven from Claude Code as the client while `codex` runs its steps, and nothing about the tool surface changes either way. The sections below register Gate as a server with each CLI that can act as a client.
 
 ## Connect Claude Code
 
@@ -45,6 +52,40 @@ opencode mcp add gate -- node server/mcp/stdio.js
 ```
 
 OpenCode surfaces the tools under the server-name prefix (`gate-mcp_project_list` and so on). The register/verify/reload flow matches Claude Code: confirm with `opencode mcp list`, list Gate projects with `project_list`, and restart OpenCode after adding the server or a skill.
+
+## Connect the other CLIs
+
+Each of the four newer CLIs can also act as an MCP client. The commands below are the vendor-documented registration forms; the argument shapes genuinely differ, so they are not variations on one pattern. Run them from the Gate repository root, because `node server/mcp/stdio.js` is a path relative to where Gate lives on disk.
+
+```bash
+# Codex — `--` before the command is mandatory for a stdio server
+codex mcp add gate -- node server/mcp/stdio.js
+
+# Gemini CLI — stdio is the default transport; no `--` separator
+gemini mcp add gate node server/mcp/stdio.js
+
+# Copilot CLI — `--` separator, writes to ~/.copilot/mcp-config.json
+copilot mcp add gate -- node server/mcp/stdio.js
+```
+
+Cursor has no `mcp add` subcommand. Registration is a file edit — `.cursor/mcp.json` in a project, or `~/.cursor/mcp.json` globally:
+
+```json
+{
+  "mcpServers": {
+    "gate": {
+      "command": "node",
+      "args": ["server/mcp/stdio.js"]
+    }
+  }
+}
+```
+
+Its `mcp` subcommands manage servers that are already configured this way: `cursor-agent mcp list`, `list-tools`, `enable`, `disable`, and `login`.
+
+Scope defaults differ too. Gemini writes project scope by default (`-s user` for the user-wide file); Codex writes `~/.codex/config.toml` and can also be configured declaratively with an `[mcp_servers.gate]` table; Copilot writes user scope, with `.mcp.json` as its per-repository tier. Each CLI has its own `mcp list` for verification.
+
+One thing to avoid: `codex mcp-server` makes Codex *itself* an MCP server, which is the opposite direction and not how you register Gate.
 
 ## The Gate skill
 
