@@ -58,7 +58,8 @@ export function buildServices({ db, config, providers }) {
   const memory = new MemoryService({ db, projects, gitAdapter, eventStore: events });
   const contexts = new ContextCompiler({ db, projects, memory, instructions, gitAdapter, eventStore: events });
   const features = new FeatureService(db, events, projects);
-  const planner = new PlannerService({ db, events, projects, features, memory, contexts, execution, timeline });
+  const planner = new PlannerService({ db, events, projects, features, memory, contexts, execution, timeline, gitAdapter });
+  execution.attachPlanner(planner);
   return {
     db,
     events,

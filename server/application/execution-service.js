@@ -84,6 +84,7 @@ export class ExecutionService {
   async schedule(projectId, context) {
     const project = this.projects.get(projectId);
     if (project.interactionLevel !== 'automatic') return [];
+
     const active = this.db
       .prepare("SELECT id FROM runs WHERE project_id = ? AND status IN ('starting', 'running') LIMIT 1")
       .get(projectId);
@@ -132,6 +133,8 @@ export class ExecutionService {
         }
       });
     }
+
+    const planWarnings = await this.#planStaleness(projectId, nodeId, context);
 
     const active = this.db
       .prepare("SELECT id FROM runs WHERE project_id = ? AND status IN ('starting', 'running') LIMIT 1")
@@ -234,7 +237,37 @@ export class ExecutionService {
     session.completion
       .then((result) => this.#finish(runId, result))
       .catch((error) => this.#finish(runId, { exitCode: 1, error }));
-    return this.get(runId);
+    return { ...this.get(runId), planWarnings };
+  }
+
+  // A plan the repository has moved past is worth saying out loud before work
+  // starts against it. It is never a reason to block the run or to rewrite an
+  // approved plan on the user's behalf.
+  async #planStaleness(projectId, nodeId, context) {
+    if (!this.planner?.checkStaleness) return [];
+    const warnings = [];
+    for (const row of this.db.prepare('SELECT planning_request_id FROM planning_request_nodes WHERE node_id = ?').all(nodeId)) {
+      try {
+        const staleness = await this.planner.checkStaleness(projectId, row.planning_request_id);
+        if (staleness.status === 'CURRENT') continue;
+        warnings.push(staleness);
+        this.events.append({
+          projectId,
+          type: 'plan.staleness.warned',
+          actor: context.actor,
+          correlationId: context.correlationId,
+          payload: { nodeId, planningRequestId: staleness.planningRequestId, status: staleness.status, reason: staleness.reason, changedGroundingFiles: staleness.changedGroundingFiles }
+        });
+      } catch {
+        // Staleness is advisory. A repository that cannot answer the question
+        // must not stop a step the human already approved.
+      }
+    }
+    return warnings;
+  }
+
+  attachPlanner(planner) {
+    this.planner = planner;
   }
 
   async draftTimeline(projectId, goal, context, modelOverride, options = {}) {

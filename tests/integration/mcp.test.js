@@ -57,12 +57,19 @@ test('MCP exposes compact timeline and review tools', async () => {
     assert.ok(names.includes('memory_search'));
     assert.ok(names.includes('memory_neighbors'));
     assert.ok(names.includes('memory_impact'));
+    assert.ok(names.includes('memory_explain'));
+    assert.ok(names.includes('memory_god_nodes'));
+    assert.ok(names.includes('memory_communities'));
+    assert.ok(names.includes('memory_path'));
+    assert.ok(names.includes('memory_query'));
     assert.ok(names.includes('memory_refresh'));
     assert.ok(names.includes('memory_context'));
     assert.ok(names.includes('feature_create'));
     assert.ok(names.includes('feature_plan'));
     assert.ok(names.includes('issue_plan'));
     assert.ok(names.includes('milestone_expand'));
+    assert.ok(names.includes('planning_check_staleness'));
+    assert.ok(names.includes('planning_reground'));
     assert.equal(names.includes('gate_decide'), false);
 
     const result = await fixture.client.callTool({
@@ -207,6 +214,46 @@ test('MCP memory impact returns symbol-grounded structural dependents', async ()
     });
     assert.deepEqual(neighborhood.structuredContent.edgeTypes, ['REFERENCES']);
     assert.ok(neighborhood.structuredContent.edges.every((edge) => edge.type === 'REFERENCES'));
+
+    const explained = await fixture.client.callTool({
+      name: 'memory_explain',
+      arguments: { projectId: 1, nodeId: symbolId, query: 'stream' }
+    });
+    assert.equal(explained.isError, undefined);
+    assert.equal(explained.structuredContent.matched, true);
+    assert.equal(explained.structuredContent.sourceLocation, 'src/core.js:1');
+    assert.ok(explained.structuredContent.relationships.every((relation) => relation.edgeId));
+
+    const central = await fixture.client.callTool({
+      name: 'memory_god_nodes',
+      arguments: { projectId: 1, edgeTypes: ['IMPORTS'] }
+    });
+    assert.equal(central.structuredContent.items[0].path, 'src/core.js');
+
+    const grouped = await fixture.client.callTool({ name: 'memory_communities', arguments: { projectId: 1 } });
+    assert.equal(grouped.structuredContent.count, 1);
+
+    const coreFile = grouped.structuredContent.items[0].members.find((node) => node.path === 'src/core.js');
+    const adapterFile = grouped.structuredContent.items[0].members.find((node) => node.path === 'src/adapter.js');
+    const walked = await fixture.client.callTool({
+      name: 'memory_path',
+      arguments: { projectId: 1, fromNodeId: adapterFile.id, toNodeId: coreFile.id, edgeTypes: ['IMPORTS'] }
+    });
+    assert.equal(walked.structuredContent.hops, 1);
+
+    const missing = await fixture.client.callTool({
+      name: 'memory_path',
+      arguments: { projectId: 1, fromNodeId: coreFile.id, toNodeId: 'memory:1:file:absent' }
+    });
+    assert.equal(missing.isError, true);
+
+    const answered = await fixture.client.callTool({
+      name: 'memory_query',
+      arguments: { projectId: 1, question: 'what depends on stream?', budget: 2000 }
+    });
+    assert.equal(answered.isError, undefined);
+    assert.ok(answered.structuredContent.citations.every((item) => item.sourceLocation));
+    assert.match(answered.structuredContent.answer, /stream/);
 
     const context = await fixture.client.callTool({
       name: 'memory_context',

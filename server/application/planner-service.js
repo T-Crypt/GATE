@@ -4,6 +4,8 @@ import { readIdempotent, runIdempotent } from './idempotency.js';
 import { normalizeTimelineGraph } from './timeline-service.js';
 import { AppError, notFound, validation } from '../domain/errors.js';
 
+export const STALENESS = { CURRENT: 'CURRENT', POSSIBLY_STALE: 'POSSIBLY_STALE', STALE: 'STALE' };
+
 function nested(context, suffix) {
   return { actor: context.actor, correlationId: context.correlationId, idempotencyKey: `${context.idempotencyKey}:${suffix}` };
 }
@@ -23,8 +25,8 @@ function remapExpansion(current, milestone, raw) {
 }
 
 export class PlannerService {
-  constructor({ db, events, projects, features, memory, contexts, execution, timeline }) {
-    Object.assign(this, { db, events, projects, features, memory, contexts, execution, timeline });
+  constructor({ db, events, projects, features, memory, contexts, execution, timeline, gitAdapter }) {
+    Object.assign(this, { db, events, projects, features, memory, contexts, execution, timeline, git: gitAdapter });
   }
 
   #source(projectId, sourceType, sourceId) {
@@ -88,6 +90,7 @@ export class PlannerService {
       status: row.status, impact: JSON.parse(row.impact_json), provenance: JSON.parse(row.provenance_json),
       context: this.contexts.get(projectId, row.context_capsule_id), draft: this.execution.getDraft(projectId, row.timeline_draft_id),
       nodes: this.db.prepare('SELECT timeline_nodes.* FROM planning_request_nodes JOIN timeline_nodes ON timeline_nodes.id = planning_request_nodes.node_id WHERE planning_request_id = ? ORDER BY timeline_nodes.ordinal').all(requestId).map((node) => ({ id: node.id, kind: node.kind, key: node.display_key, title: node.title, parentId: node.parent_id, status: node.status })),
+      supersedesId: row.supersedes_id,
       createdAt: row.created_at, acceptedAt: row.accepted_at
     };
   }
@@ -109,6 +112,63 @@ export class PlannerService {
         if (request.sourceType === 'feature') this.db.prepare("UPDATE features SET status = 'approved', updated_at = datetime('now') WHERE id = ? AND status = 'planning'").run(request.sourceId);
       });
       return this.get(projectId, requestId);
+    });
+  }
+
+  // The files a plan was reasoned over: the capsule's sources plus the files
+  // its selected symbols were parsed from.
+  #groundingFiles(request) {
+    return [...new Set([
+      ...(request.context.provenance.sourceFiles || []),
+      ...(request.context.payload.symbols || []).map((symbol) => symbol.path)
+    ].filter(Boolean))];
+  }
+
+  async checkStaleness(projectId, requestId) {
+    const project = this.projects.get(projectId);
+    const request = this.get(projectId, requestId);
+    const groundingFiles = this.#groundingFiles(request);
+    const plannedSha = request.provenance.repositorySha;
+    const inspected = await this.git.inspect(project.repoPath);
+    const base = { projectId, planningRequestId: requestId, status: STALENESS.CURRENT, plannedSha, repositorySha: inspected.headSha, groundingFiles, changedFiles: [], changedGroundingFiles: [] };
+    if (inspected.headSha === plannedSha) {
+      return { ...base, reason: 'The repository has not moved since this plan was grounded.' };
+    }
+    let changedFiles;
+    try {
+      changedFiles = await this.git.changedFilesBetween(project.repoPath, plannedSha, inspected.headSha);
+    } catch {
+      // A rewritten or pruned history makes the grounding commit unreachable.
+      // That is a reason to re-ground, not a reason to fail the request.
+      return { ...base, status: STALENESS.POSSIBLY_STALE, reason: `The commit this plan was grounded on (${plannedSha.slice(0, 12)}) is no longer reachable.` };
+    }
+    const changedGroundingFiles = changedFiles.filter((file) => groundingFiles.includes(file));
+    if (!changedGroundingFiles.length) {
+      return { ...base, status: STALENESS.POSSIBLY_STALE, changedFiles, reason: `The repository moved to ${inspected.headSha.slice(0, 12)} but none of the ${groundingFiles.length} files this plan was grounded on changed.` };
+    }
+    return {
+      ...base,
+      status: STALENESS.STALE,
+      changedFiles,
+      changedGroundingFiles,
+      reason: `${changedGroundingFiles.length} file${changedGroundingFiles.length === 1 ? '' : 's'} this plan was grounded on changed: ${changedGroundingFiles.slice(0, 5).join(', ')}.`
+    };
+  }
+
+  // Re-grounding proposes a fresh plan against current Memory and links it back
+  // to the one it was grounded against. The original row is never touched.
+  async reground(projectId, requestId, input, context) {
+    const original = this.get(projectId, requestId);
+    const staleness = await this.checkStaleness(projectId, requestId);
+    const planInput = { model: input?.model, tokenBudget: input?.tokenBudget };
+    const created = original.sourceType === 'milestone'
+      ? await this.expandMilestone(projectId, original.sourceId, planInput, nested(context, 'reground'))
+      : await this.plan(projectId, { ...planInput, sourceType: original.sourceType, sourceId: original.sourceId }, nested(context, 'reground'));
+    return runIdempotent(this.db, context, { command: 'planning.reground', projectId, requestId }, () => {
+      this.events.append({ projectId, type: 'planning.regrounded', actor: context.actor, correlationId: context.correlationId, payload: { planningRequestId: created.id, supersedesId: requestId, sourceType: original.sourceType, sourceId: original.sourceId, staleness: staleness.status } }, () => {
+        this.db.prepare('UPDATE planning_requests SET supersedes_id = ? WHERE id = ? AND supersedes_id IS NULL').run(requestId, created.id);
+      });
+      return { ...this.get(projectId, created.id), staleness };
     });
   }
 }

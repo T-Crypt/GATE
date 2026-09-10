@@ -16,6 +16,20 @@ export function featuresRouter(features, planner) {
   router.post('/projects/:projectId/issues/:issueId/plan', requireIdempotency, async (req, res) => data(res, await planner.plan(Number(req.params.projectId), { ...planInput.parse(req.body), sourceType: 'issue', sourceId: req.params.issueId }, commandContext(req)), 201));
   router.post('/projects/:projectId/timeline/nodes/:milestoneId/expansions', requireIdempotency, async (req, res) => data(res, await planner.expandMilestone(Number(req.params.projectId), req.params.milestoneId, planInput.parse(req.body), commandContext(req)), 201));
   router.get('/projects/:projectId/planning/:requestId', (req, res) => data(res, planner.get(Number(req.params.projectId), req.params.requestId)));
+  router.get('/projects/:projectId/planning/:requestId/staleness', async (req, res, next) => {
+    try {
+      return data(res, await planner.checkStaleness(Number(req.params.projectId), req.params.requestId));
+    } catch (error) {
+      return next(error);
+    }
+  });
+  router.post('/projects/:projectId/planning/:requestId/reground', requireIdempotency, async (req, res, next) => {
+    try {
+      return data(res, await planner.reground(Number(req.params.projectId), req.params.requestId, planInput.parse(req.body), commandContext(req)), 201);
+    } catch (error) {
+      return next(error);
+    }
+  });
   router.post('/projects/:projectId/planning/:requestId/accept', requireIdempotency, (req, res) => data(res, planner.accept(Number(req.params.projectId), req.params.requestId, commandContext(req))));
   return router;
 }
