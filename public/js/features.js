@@ -4,10 +4,22 @@ function nodeName(node) {
   return node.path || node.sourcePath || node.name || node.id;
 }
 
-export function planningReview(plan) {
+// Options on an accepted plan mirror the review boundary: re-ground it, read
+// what changed, or keep it. Nothing here discards approved work.
+function stalenessPanel(plan, staleness) {
+  if (!staleness) return '';
+  const changed = staleness.changedGroundingFiles || [];
+  const actions = staleness.status === 'CURRENT'
+    ? ''
+    : `<div class="button-row"><button class="button" data-reground-plan="${escapeHtml(plan.id)}">Re-ground milestone</button><span class="muted-copy">Keeping the existing plan changes nothing.</span></div>`;
+  return `<p class="settings-copy"><span class="badge">${escapeHtml(staleness.status)}</span> ${escapeHtml(staleness.reason)}</p>${changed.length ? `<ul class="feature-impact-list">${changed.map((file) => `<li><code>${escapeHtml(file)}</code></li>`).join('')}</ul>` : ''}${actions}`;
+}
+
+export function planningReview(plan, staleness) {
   const impact = plan.impact || { directMatches: [], dependents: [], tests: [], risk: 'low' };
   const nodes = (items) => items.length ? `<ul class="feature-impact-list">${items.map((item) => `<li><code>${escapeHtml(nodeName(item))}</code></li>`).join('')}</ul>` : '<span class="muted-copy">None identified</span>';
-  return `<article class="feature-plan" data-plan-id="${escapeHtml(plan.id)}"><div class="panel-header"><div><p class="eyebrow">Grounded proposal</p><h3>${escapeHtml(plan.goal)}</h3></div><span class="badge">${escapeHtml(String(impact.risk || 'low').toUpperCase())}</span></div><div class="feature-impact-grid"><div><strong>Matches</strong>${nodes(impact.directMatches || [])}</div><div><strong>Dependents</strong>${nodes(impact.dependents || [])}</div><div><strong>Tests</strong>${nodes(impact.tests || [])}</div></div><p class="settings-copy">${plan.draft.graph.nodes.length} timeline nodes · ${plan.context.estimatedTokens}/${plan.context.tokenBudget} estimated context tokens · revision <code>${escapeHtml(plan.provenance.memoryRevisionSha.slice(0, 12))}</code></p>${plan.status === 'proposed' ? `<button class="button primary" data-accept-plan="${escapeHtml(plan.id)}">Accept proposed timeline</button>` : '<span class="badge">Accepted</span>'}</article>`;
+  const supersedes = plan.supersedesId ? `<p class="muted-copy">Re-grounded from plan <code>${escapeHtml(plan.supersedesId.slice(0, 8))}</code></p>` : '';
+  return `<article class="feature-plan" data-plan-id="${escapeHtml(plan.id)}"><div class="panel-header"><div><p class="eyebrow">Grounded proposal</p><h3>${escapeHtml(plan.goal)}</h3></div><span class="badge">${escapeHtml(String(impact.risk || 'low').toUpperCase())}</span></div>${supersedes}<div class="feature-impact-grid"><div><strong>Matches</strong>${nodes(impact.directMatches || [])}</div><div><strong>Dependents</strong>${nodes(impact.dependents || [])}</div><div><strong>Tests</strong>${nodes(impact.tests || [])}</div></div><p class="settings-copy">${plan.draft.graph.nodes.length} timeline nodes · ${plan.context.estimatedTokens}/${plan.context.tokenBudget} estimated context tokens · revision <code>${escapeHtml(plan.provenance.memoryRevisionSha.slice(0, 12))}</code></p>${stalenessPanel(plan, staleness)}${plan.status === 'proposed' ? `<button class="button primary" data-accept-plan="${escapeHtml(plan.id)}">Accept proposed timeline</button>` : '<span class="badge">Accepted</span>'}</article>`;
 }
 
 export function bindPlanningReview(container, { project, api, onAccepted }) {
@@ -19,6 +31,24 @@ export function bindPlanningReview(container, { project, api, onAccepted }) {
       await onAccepted?.();
     } catch (error) { showToast(error.message, 'error'); button.disabled = false; }
   }));
+  container.querySelectorAll('[data-reground-plan]').forEach((button) => button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      await api.regroundPlanningRequest(project.id, button.dataset.regroundPlan);
+      showToast('Re-grounded plan proposed alongside the accepted one');
+      await onAccepted?.();
+    } catch (error) { showToast(error.message, 'error'); button.disabled = false; }
+  }));
+}
+
+// Staleness is advisory and needs a request per accepted plan, so a plan that
+// cannot be checked simply renders without a badge.
+export async function planStaleness(api, project, plans) {
+  const entries = await Promise.all(plans.filter((plan) => plan.status === 'accepted').map(async (plan) => {
+    try { return [plan.id, await api.getPlanningStaleness(project.id, plan.id)]; }
+    catch { return null; }
+  }));
+  return Object.fromEntries(entries.filter(Boolean));
 }
 
 export async function initFeatures(container, { project, api }) {
@@ -30,8 +60,9 @@ export async function initFeatures(container, { project, api }) {
     async function showFeature(featureId) {
       const feature = features.find((item) => item.id === featureId);
       const plans = await api.listFeaturePlans(project.id, featureId);
+      const staleness = await planStaleness(api, project, plans);
       const detail = container.querySelector('#featureDetail');
-      detail.innerHTML = `<div class="panel-header"><div><p class="eyebrow">Feature workspace</p><h2>${escapeHtml(feature.title)}</h2></div><span class="badge">${escapeHtml(feature.status)}</span></div><div class="panel-body"><p>${escapeHtml(feature.intent)}</p><div class="button-row"><button class="button primary" id="planFeature" ${feature.status === 'cancelled' || feature.status === 'complete' || plans.some((plan) => plan.status === 'proposed') ? 'disabled' : ''}>Plan feature</button></div><div class="feature-plans">${plans.map(planningReview).join('') || '<p class="muted-copy">No plans yet.</p>'}</div></div>`;
+      detail.innerHTML = `<div class="panel-header"><div><p class="eyebrow">Feature workspace</p><h2>${escapeHtml(feature.title)}</h2></div><span class="badge">${escapeHtml(feature.status)}</span></div><div class="panel-body"><p>${escapeHtml(feature.intent)}</p><div class="button-row"><button class="button primary" id="planFeature" ${feature.status === 'cancelled' || feature.status === 'complete' || plans.some((plan) => plan.status === 'proposed') ? 'disabled' : ''}>Plan feature</button></div><div class="feature-plans">${plans.map((plan) => planningReview(plan, staleness[plan.id])).join('') || '<p class="muted-copy">No plans yet.</p>'}</div></div>`;
       detail.querySelector('#planFeature')?.addEventListener('click', async (event) => {
         event.currentTarget.disabled = true;
         try { await api.planFeature(project.id, featureId); showToast('Feature plan proposed'); await initFeatures(container, { project, api }); }

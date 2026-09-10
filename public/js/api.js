@@ -69,6 +69,8 @@ export const api = {
   planIssue: (projectId, issueId, input = {}) => request(`/projects/${projectId}/issues/${issueId}/plan`, { method: 'POST', body: input }),
   expandMilestone: (projectId, milestoneId, input = {}) => request(`/projects/${projectId}/timeline/nodes/${encodeURIComponent(milestoneId)}/expansions`, { method: 'POST', body: input }),
   getPlanningRequest: (projectId, requestId) => request(`/projects/${projectId}/planning/${encodeURIComponent(requestId)}`),
+  getPlanningStaleness: (projectId, requestId) => request(`/projects/${projectId}/planning/${encodeURIComponent(requestId)}/staleness`),
+  regroundPlanningRequest: (projectId, requestId, input = {}) => request(`/projects/${projectId}/planning/${encodeURIComponent(requestId)}/reground`, { method: 'POST', body: input }),
   acceptPlanningRequest: (projectId, requestId) => request(`/projects/${projectId}/planning/${encodeURIComponent(requestId)}/accept`, { method: 'POST', body: {} }),
   getTimeline: (projectId) => request(`/projects/${projectId}/timeline`),
   replaceTimeline: (projectId, graph) => request(`/projects/${projectId}/timeline`, { method: 'PUT', body: graph }),

@@ -32,7 +32,7 @@ test('migrations create an immutable ordered event store', () => {
     ]);
     assert.equal(
       db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version,
-      10
+      11
     );
     assert.ok(
       db.prepare('PRAGMA table_info(memory_nodes)').all().some((column) => column.name === 'source_path')

@@ -37,7 +37,9 @@ function setup() {
       plan: async (projectId, input) => ({ id: 'plan-1', projectId, ...input, status: 'proposed' }),
       get: (projectId, id) => ({ id, projectId, status: 'proposed' }),
       accept: (projectId, id) => ({ id, projectId, status: 'accepted' }),
-      expandMilestone: async (projectId, sourceId) => ({ id: 'expansion-1', projectId, sourceId, status: 'proposed' })
+      expandMilestone: async (projectId, sourceId) => ({ id: 'expansion-1', projectId, sourceId, status: 'proposed' }),
+      checkStaleness: async (projectId, id) => ({ projectId, planningRequestId: id, status: 'STALE', changedGroundingFiles: ['src/provider.js'] }),
+      reground: async (projectId, id, input) => ({ id: 'plan-2', projectId, supersedesId: id, status: 'proposed', ...input })
     },
     timeline,
     execution: {
@@ -303,6 +305,15 @@ test('feature routes preserve lifecycle and expose planning actions', async () =
     assert.equal(planning.body.data.sourceType, 'feature');
     const issue = await request(fixture.app).post('/api/v1/projects/1/issues/12/plan').set('Idempotency-Key', 'issue-plan-http').send({});
     assert.equal(issue.body.data.sourceType, 'issue');
+    const staleness = await request(fixture.app).get('/api/v1/projects/1/planning/plan-1/staleness');
+    assert.equal(staleness.status, 200);
+    assert.equal(staleness.body.data.status, 'STALE');
+    const regroundWithoutKey = await request(fixture.app).post('/api/v1/projects/1/planning/plan-1/reground').send({});
+    assert.equal(regroundWithoutKey.status, 400);
+    const regrounded = await request(fixture.app).post('/api/v1/projects/1/planning/plan-1/reground').set('Idempotency-Key', 'reground-http').send({ tokenBudget: 1200 });
+    assert.equal(regrounded.status, 201);
+    assert.equal(regrounded.body.data.supersedesId, 'plan-1');
+    assert.equal(regrounded.body.data.tokenBudget, 1200);
   } finally { fixture.close(); }
 });
 

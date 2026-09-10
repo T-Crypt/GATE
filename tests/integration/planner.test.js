@@ -39,8 +39,9 @@ function setup() {
   const memory = new MemoryService({ db: database.db, projects, gitAdapter: git, eventStore: events });
   const contexts = new ContextCompiler({ db: database.db, projects, memory, instructions, gitAdapter: git, eventStore: events });
   const features = new FeatureService(database.db, events, projects);
-  const planner = new PlannerService({ db: database.db, events, projects, features, memory, contexts, execution, timeline });
-  return { ...database, repository, events, project, provider, timeline, memory, features, planner, closeAll() { database.close(); repository.close(); } };
+  const planner = new PlannerService({ db: database.db, events, projects, features, memory, contexts, execution, timeline, gitAdapter: git });
+  execution.attachPlanner(planner);
+  return { ...database, repository, events, project, provider, timeline, memory, execution, features, planner, closeAll() { database.close(); repository.close(); } };
 }
 
 test('feature planning persists grounded impact and remains proposed until acceptance', async () => {
@@ -98,5 +99,88 @@ test('issue planning and milestone expansion use the same proposed-plan boundary
     assert.equal(fixture.timeline.get(fixture.project.id).nodes.length, 2);
     assert.ok(expansion.draft.graph.nodes.length > 2);
     assert.ok(expansion.draft.graph.nodes.filter((node) => node.kind === 'step' && node.id !== 'draft-s').every((node) => node.parentId === milestone.id));
+  } finally { fixture.closeAll(); }
+});
+
+async function acceptedPlan(fixture, title = 'Cancellation') {
+  const feature = fixture.features.create(fixture.project.id, { title, intent: 'Change cancelProvider behavior safely.' }, command(`feature-${title}`));
+  await fixture.memory.refresh(fixture.project.id, { force: true }, command(`refresh-${title}`));
+  const proposed = await fixture.planner.plan(fixture.project.id, { sourceType: 'feature', sourceId: feature.id }, command(`plan-${title}`));
+  return { feature, plan: fixture.planner.accept(fixture.project.id, proposed.id, command(`accept-${title}`)) };
+}
+
+function commitFile(fixture, relativePath, contents, message) {
+  const target = path.join(fixture.repository.repoPath, relativePath);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, contents);
+  fixture.repository.run(['add', '.']);
+  fixture.repository.run(['commit', '-m', message]);
+}
+
+test('plan staleness distinguishes an untouched repository from a moved one', async () => {
+  const fixture = setup();
+  try {
+    const { plan } = await acceptedPlan(fixture);
+
+    const current = await fixture.planner.checkStaleness(fixture.project.id, plan.id);
+    assert.equal(current.status, 'CURRENT');
+    assert.deepEqual(current.changedFiles, []);
+    assert.ok(current.groundingFiles.includes('src/provider.js'));
+
+    commitFile(fixture, 'docs/notes.md', 'Unrelated documentation.\n', 'add unrelated docs');
+    const possibly = await fixture.planner.checkStaleness(fixture.project.id, plan.id);
+    assert.equal(possibly.status, 'POSSIBLY_STALE');
+    assert.ok(possibly.changedFiles.includes('docs/notes.md'));
+    assert.deepEqual(possibly.changedGroundingFiles, []);
+    assert.notEqual(possibly.repositorySha, possibly.plannedSha);
+
+    commitFile(fixture, 'src/provider.js', 'export function cancelProvider() { return false; }\n', 'change grounded file');
+    const stale = await fixture.planner.checkStaleness(fixture.project.id, plan.id);
+    assert.equal(stale.status, 'STALE');
+    assert.deepEqual(stale.changedGroundingFiles, ['src/provider.js']);
+    assert.match(stale.reason, /src\/provider\.js/);
+  } finally { fixture.closeAll(); }
+});
+
+test('re-grounding proposes a linked plan and leaves the accepted one untouched', async () => {
+  const fixture = setup();
+  try {
+    const { plan } = await acceptedPlan(fixture);
+    commitFile(fixture, 'src/provider.js', 'export function cancelProvider() { return false; }\n', 'change grounded file');
+    await fixture.memory.refresh(fixture.project.id, {}, command('refresh-regrounded'));
+
+    const regrounded = await fixture.planner.reground(fixture.project.id, plan.id, {}, command('reground'));
+    const repeated = await fixture.planner.reground(fixture.project.id, plan.id, {}, command('reground'));
+    const original = fixture.planner.get(fixture.project.id, plan.id);
+
+    assert.equal(regrounded.status, 'proposed');
+    assert.equal(regrounded.supersedesId, plan.id);
+    assert.equal(regrounded.staleness.status, 'STALE');
+    assert.notEqual(regrounded.id, plan.id);
+    assert.deepEqual(repeated, regrounded);
+    assert.equal(original.status, 'accepted');
+    assert.equal(original.supersedesId, null);
+    assert.deepEqual(original.provenance, plan.provenance);
+    assert.equal(original.acceptedAt, plan.acceptedAt);
+    assert.equal(fixture.timeline.get(fixture.project.id).nodes.length, plan.nodes.length);
+    assert.equal(fixture.events.readAfter(fixture.project.id, 0, 200).some((event) => event.type === 'planning.regrounded'), true);
+  } finally { fixture.closeAll(); }
+});
+
+test('starting a step against a stale plan warns instead of blocking', async () => {
+  const fixture = setup();
+  try {
+    const { plan } = await acceptedPlan(fixture);
+    commitFile(fixture, 'src/provider.js', 'export function cancelProvider() { return false; }\n', 'change grounded file');
+    const step = plan.nodes.find((node) => node.kind === 'step');
+
+    const run = await fixture.execution.start(fixture.project.id, step.id, command('start-stale'));
+
+    assert.equal(run.status, 'running');
+    assert.equal(run.planWarnings.length, 1);
+    assert.equal(run.planWarnings[0].status, 'STALE');
+    assert.equal(run.planWarnings[0].planningRequestId, plan.id);
+    assert.equal(fixture.events.readAfter(fixture.project.id, 0, 200).some((event) => event.type === 'plan.staleness.warned'), true);
+    assert.equal(fixture.planner.get(fixture.project.id, plan.id).status, 'accepted');
   } finally { fixture.closeAll(); }
 });

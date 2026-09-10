@@ -410,6 +410,12 @@ export function registerTools(server, services) {
   server.registerTool('milestone_expand', {
     description: 'Propose child steps for an accepted milestone without changing the current timeline.', inputSchema: { projectId, milestoneId: z.string().trim().min(1).max(500), model: z.string().trim().max(200).optional(), tokenBudget: z.number().int().min(512).max(32_000).optional(), idempotencyKey }, annotations: { idempotentHint: true, openWorldHint: false }
   }, handler(({ projectId: id, milestoneId, idempotencyKey: key, ...input }) => services.planner.expandMilestone(id, milestoneId, input, actorContext(key))));
+  server.registerTool('planning_check_staleness', {
+    description: 'Compare a plan against current repository state: CURRENT, POSSIBLY_STALE when the repository moved without touching the plan grounding, or STALE when a grounding file changed.', inputSchema: { projectId, planningRequestId: z.string().uuid() }, annotations: { readOnlyHint: true, openWorldHint: false }
+  }, handler(({ projectId: id, planningRequestId }) => services.planner.checkStaleness(id, planningRequestId)));
+  server.registerTool('planning_reground', {
+    description: 'Propose a fresh Memory-grounded plan for the same source and link it to the plan it supersedes. The original plan is never modified or discarded.', inputSchema: { projectId, planningRequestId: z.string().uuid(), model: z.string().trim().max(200).optional(), tokenBudget: z.number().int().min(512).max(32_000).optional(), idempotencyKey }, annotations: { idempotentHint: true, openWorldHint: false }
+  }, handler(({ projectId: id, planningRequestId, idempotencyKey: key, ...input }) => services.planner.reground(id, planningRequestId, input, actorContext(key))));
   server.registerTool('planning_get', {
     description: 'Read a proposed or accepted planning request with impact and provenance.', inputSchema: { projectId, planningRequestId: z.string().uuid() }, annotations: { readOnlyHint: true, openWorldHint: false }
   }, handler(({ projectId: id, planningRequestId }) => services.planner.get(id, planningRequestId)));
