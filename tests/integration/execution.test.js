@@ -213,6 +213,72 @@ test('drafting a timeline sends the synced project digest as repository context'
   }
 });
 
+test('a draft that violates the contract is retried once with the reason', async () => {
+  // Seen in practice: the model pointed a code_gate edge at a gate id, which
+  // normalization rejects as a dangling edge. A draft costs a full round-trip,
+  // so the reason is fed back rather than lost.
+  const attempts = [];
+  const provider = new FakeProvider();
+  provider.draftTimeline = async (request) => {
+    attempts.push(request);
+    if (attempts.length === 1) {
+      return {
+        nodes: [{ id: 'm1', key: 'A', kind: 'milestone', title: 'Build', ordinal: 0 }],
+        edges: [{ fromNodeId: 'm1', toNodeId: 'gate-1', type: 'code_gate' }],
+        gates: []
+      };
+    }
+    return {
+      nodes: [
+        { id: 'm1', key: 'A', kind: 'milestone', title: 'Build', ordinal: 0 },
+        { id: 's1', key: 'A-1', kind: 'step', parentId: 'm1', title: 'Ship', ordinal: 0 }
+      ],
+      edges: [{ fromNodeId: 'm1', toNodeId: 's1', type: 'depends_on' }],
+      gates: []
+    };
+  };
+  const fixture = setup(provider);
+  try {
+    const draft = await fixture.execution.draftTimeline(
+      fixture.project.id,
+      'Ship the workstation',
+      context('draft-retry')
+    );
+    assert.equal(attempts.length, 2);
+    assert.equal(attempts[0].feedback, undefined);
+    assert.match(attempts[1].feedback, /missing node/i);
+    assert.equal(draft.status, 'proposed');
+    assert.equal(draft.graph.nodes.length, 2);
+  } finally {
+    fixture.close();
+    fixture.gitFixture.close();
+  }
+});
+
+test('a draft that violates the contract twice is not retried again', async () => {
+  const attempts = [];
+  const provider = new FakeProvider();
+  provider.draftTimeline = async (request) => {
+    attempts.push(request);
+    return {
+      nodes: [{ id: 'm1', key: 'A', kind: 'milestone', title: 'Build', ordinal: 0 }],
+      edges: [{ fromNodeId: 'm1', toNodeId: 'gate-1', type: 'code_gate' }],
+      gates: []
+    };
+  };
+  const fixture = setup(provider);
+  try {
+    await assert.rejects(
+      () => fixture.execution.draftTimeline(fixture.project.id, 'Ship it', context('draft-retry-fail')),
+      (error) => error.code === 'DANGLING_EDGE'
+    );
+    assert.equal(attempts.length, 2);
+  } finally {
+    fixture.close();
+    fixture.gitFixture.close();
+  }
+});
+
 test('drafting passes a per-draft model override to the provider', async () => {
   const provider = new FakeProvider();
   const fixture = setup(provider);

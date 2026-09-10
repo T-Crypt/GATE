@@ -169,9 +169,9 @@ export class OpenCodeProvider {
     return { sessionId: lastSessionId || sessionId, completion: running.completion, cancel: running.cancel };
   }
 
-  async draftTimeline({ goal, repositoryContext, cwd, model, env }) {
+  async draftTimeline({ goal, repositoryContext, cwd, model, env, feedback }) {
     const prompt = [
-      buildTimelinePrompt({ goal, repositoryContext }),
+      buildTimelinePrompt({ goal, repositoryContext, feedback }),
       'Reply with that JSON object and nothing else. No prose, no markdown fences.'
     ].join('\n\n');
     const parts = [];

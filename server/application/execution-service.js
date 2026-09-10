@@ -32,6 +32,20 @@ function internalContext(context, suffix, actor = context.actor) {
   };
 }
 
+// Contract violations are worth one more attempt; a provider that failed to
+// run, timed out, or returned nothing is not going to do better unprompted.
+const REPAIRABLE_DRAFT_CODES = new Set([
+  'VALIDATION_FAILED',
+  'INVALID_PARENT',
+  'INVALID_GATE_NODE',
+  'DANGLING_EDGE',
+  'TIMELINE_CYCLE'
+]);
+
+function isRepairableDraft(error) {
+  return Boolean(error?.code && REPAIRABLE_DRAFT_CODES.has(error.code));
+}
+
 function buildRepositoryContext(project, digest) {
   const base = `Repository ${project.repoPath}; base ${project.baseBranch}`;
   if (!digest) return base;
@@ -232,13 +246,25 @@ export class ExecutionService {
       });
     }
     const digest = this.db.prepare('SELECT * FROM project_digests WHERE project_id = ?').get(projectId) || null;
-    const providerGraph = await provider.draftTimeline({
-        goal: String(goal ?? '').trim(),
-        repositoryContext: options.repositoryContext || buildRepositoryContext(project, digest),
-        cwd: project.repoPath,
-        model: modelOverride || project.providerConfig.model
-      });
-    const graph = normalizeTimelineGraph(options.transformGraph ? options.transformGraph(providerGraph) : providerGraph);
+    const request = {
+      goal: String(goal ?? '').trim(),
+      repositoryContext: options.repositoryContext || buildRepositoryContext(project, digest),
+      cwd: project.repoPath,
+      model: modelOverride || project.providerConfig.model
+    };
+    // A draft costs a full model round-trip. When the result misses the
+    // contract in a way the model can act on, say what was wrong and ask once
+    // more rather than making the user retype the goal and wait again.
+    let graph;
+    try {
+      graph = this.#normalize(await provider.draftTimeline(request), options);
+    } catch (error) {
+      if (!isRepairableDraft(error)) throw error;
+      graph = this.#normalize(
+        await provider.draftTimeline({ ...request, feedback: error.message }),
+        options
+      );
+    }
     return runIdempotent(
       this.db,
       context,
@@ -265,6 +291,10 @@ export class ExecutionService {
         return this.#getDraft(id);
       }
     );
+  }
+
+  #normalize(providerGraph, options) {
+    return normalizeTimelineGraph(options.transformGraph ? options.transformGraph(providerGraph) : providerGraph);
   }
 
   acceptDraft(projectId, draftId, context) {
