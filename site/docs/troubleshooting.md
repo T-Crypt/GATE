@@ -58,7 +58,7 @@ Error codes, interrupted runs, and the recovery procedure for the local database
 
 | Code | Meaning and fix |
 | --- | --- |
-| `PROVIDER_UNAVAILABLE` | The project's provider is not registered or its CLI is not reachable. Install and authenticate the Claude CLI or the OpenCode CLI, and confirm the project's `providerKind` and model. |
+| `PROVIDER_UNAVAILABLE` | The project's provider is not registered or its CLI is not reachable. Install and authenticate the CLI for the project's `providerKind` (`claude`, `opencode`, `codex`, `gemini`, `cursor-agent`, or `copilot`), and confirm the configured model. |
 | `PROVIDER_LAUNCH_FAILED` | The provider process could not be spawned. Check the CLI executable and permissions. |
 | `PROVIDER_OUTPUT_INVALID` | The provider returned malformed output. Confirm the model supports structured output and retry the draft. |
 | `PROVIDER_OUTPUT_INCOMPLETE` | The provider returned an empty or truncated result. Re-draft (a retry often fixes transient truncation). |

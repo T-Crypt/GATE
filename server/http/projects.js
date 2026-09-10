@@ -86,7 +86,11 @@ export function projectsRouter(projects, instructions, providerMap) {
     if (model) {
       const kind = input.providerKind ?? projects.get(Number(req.params.projectId)).providerKind;
       const provider = providerMap?.get(kind);
-      const known = provider?.listModels ? (await provider.listModels()).models : [];
+      const catalog = provider?.listModels ? await provider.listModels() : { models: [] };
+      // A provider whose CLI cannot enumerate models reports `complete: false`:
+      // its list is a suggestion, so rejecting an id that is missing from it
+      // would block models the harness can reach perfectly well.
+      const known = catalog.complete === false ? [] : catalog.models;
       if (known.length && !known.some((candidate) => candidate.id === model)) {
         throw new AppError('UNKNOWN_MODEL', `${kind} cannot reach the model "${model}"`, {
           status: 422,

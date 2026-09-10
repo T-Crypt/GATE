@@ -1,6 +1,10 @@
 import { GitAdapter } from './adapters/git.js';
 import { GithubRemoteAdapter } from './adapters/remote/github.js';
 import { ClaudeProvider } from './adapters/providers/claude.js';
+import { CodexProvider } from './adapters/providers/codex.js';
+import { CopilotProvider } from './adapters/providers/copilot.js';
+import { CursorProvider } from './adapters/providers/cursor.js';
+import { GeminiProvider } from './adapters/providers/gemini.js';
 import { OpenCodeProvider } from './adapters/providers/opencode.js';
 import { DashboardService } from './application/dashboard-service.js';
 import { ContextCompiler } from './application/context-compiler.js';
@@ -22,22 +26,21 @@ export function buildServices({ db, config, providers }) {
   const gitAdapter = new GitAdapter();
   const projects = new ProjectService(db, events, gitAdapter);
   const timeline = new TimelineService(db, events);
+  // One entry per shipped adapter. A project's `providerKind` is the key; the
+  // adapters are constructed eagerly because nothing here touches a CLI until a
+  // run starts or a model catalog is requested.
   const providerMap =
     providers ||
-    new Map([
+    new Map(
       [
-        'claude',
-        new ClaudeProvider({
-          outputLimitBytes: config.outputLimitBytes
-        })
-      ],
-      [
-        'opencode',
-        new OpenCodeProvider({
-          outputLimitBytes: config.outputLimitBytes
-        })
-      ]
-    ]);
+        ['claude', ClaudeProvider],
+        ['opencode', OpenCodeProvider],
+        ['codex', CodexProvider],
+        ['gemini', GeminiProvider],
+        ['cursor', CursorProvider],
+        ['copilot', CopilotProvider]
+      ].map(([kind, Provider]) => [kind, new Provider({ outputLimitBytes: config.outputLimitBytes })])
+    );
   const repoMirror = new RepoMirrorService({ db, projects });
   repoMirror.attach(events);
   const remoteAdapter = new GithubRemoteAdapter({

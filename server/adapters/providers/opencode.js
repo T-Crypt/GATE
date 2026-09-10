@@ -4,13 +4,10 @@ import path from 'node:path';
 
 import { AppError } from '../../domain/errors.js';
 import { ProcessRunner } from './process-runner.js';
+import { createLineReader, parseTimelineJson } from './cli-support.js';
 import { buildTimelinePrompt } from './timeline-contract.js';
 
 export const DEFAULT_MODEL = 'opencode/big-pickle';
-
-function isEmptyObject(value) {
-  return value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0;
-}
 
 // npm installs the Windows command as a .ps1/.cmd shim that execs the real
 // binary out of node_modules/opencode-ai/bin/opencode.exe. ProcessRunner spawns
@@ -58,30 +55,6 @@ function resolveFromShim(shim, directory, { existsSync, readFileSync, pathApi })
   if (!relative || !relative.toLowerCase().endsWith('.exe')) return null;
   const candidate = pathApi.join(directory, ...relative.split('\\'));
   return existsSync(candidate) ? candidate : null;
-}
-
-function stripCodeFence(output) {
-  const match = /^```(?:json)?\s*\n([\s\S]*?)\n```\s*$/.exec(output.trim());
-  return match ? match[1].trim() : output.trim();
-}
-
-function parseStructuredOutput(output) {
-  let parsed;
-  try {
-    parsed = JSON.parse(stripCodeFence(output));
-  } catch {
-    throw new AppError('PROVIDER_OUTPUT_INVALID', 'OpenCode returned invalid JSON', {
-      status: 502
-    });
-  }
-  if (isEmptyObject(parsed)) {
-    throw new AppError(
-      'PROVIDER_OUTPUT_INCOMPLETE',
-      'OpenCode finished without producing a timeline. Try rephrasing the goal or retry the draft.',
-      { status: 502 }
-    );
-  }
-  return parsed;
 }
 
 // `opencode run --format json` writes one JSON object per line. On the wire the
@@ -144,7 +117,7 @@ export class OpenCodeProvider {
     if (request.permissionMode && request.permissionMode !== 'deny') args.push('--auto');
 
     let lastSessionId = null;
-    const lineReader = this.#lineReader((event) => {
+    const lineReader = createLineReader((event) => {
       lastSessionId = event.sessionID || lastSessionId;
       if (event.type !== 'text') return;
       if (event.part?.text === undefined || event.part.text === request.prompt) return;
@@ -175,7 +148,7 @@ export class OpenCodeProvider {
       'Reply with that JSON object and nothing else. No prose, no markdown fences.'
     ].join('\n\n');
     const parts = [];
-    const lineReader = this.#lineReader((event) => {
+    const lineReader = createLineReader((event) => {
       if (event.type === 'text' && event.part?.text !== undefined) parts.push(event.part.text);
     });
     const running = await this.runner.start(
@@ -199,32 +172,6 @@ export class OpenCodeProvider {
     }
     // The last finalized text part is the assistant's answer; everything before
     // it is the echoed prompt, reasoning, or tool chatter.
-    const answer = parts.at(-1);
-    if (!answer) {
-      throw new AppError('PROVIDER_OUTPUT_INCOMPLETE', 'OpenCode produced no timeline text', {
-        status: 502
-      });
-    }
-    return parseStructuredOutput(answer);
-  }
-
-  #lineReader(onEvent) {
-    let buffer = '';
-    return (chunk) => {
-      buffer += chunk;
-      let newline = buffer.indexOf('\n');
-      while (newline !== -1) {
-        const line = buffer.slice(0, newline).trim();
-        buffer = buffer.slice(newline + 1);
-        if (line) {
-          try {
-            onEvent(JSON.parse(line));
-          } catch {
-            // Non-JSON junk on stdout is not an event; ignore it line-by-line.
-          }
-        }
-        newline = buffer.indexOf('\n');
-      }
-    };
+    return parseTimelineJson(parts.at(-1), 'OpenCode');
   }
 }

@@ -34,13 +34,13 @@ async function createProject(request, key, name) {
 // The model list comes from whichever harness CLI is installed on the machine
 // running the tests. Stub it so these assertions describe Gate's behaviour
 // rather than the box's toolchain.
-async function stubModels(page, models) {
+async function stubModels(page, models, extra = {}) {
   await page.route('**/api/v1/providers/*/models', async (route) => {
     const kind = new URL(route.request().url()).pathname.split('/').at(-2);
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ data: { kind, authenticated: true, models }, meta: { apiVersion: 'v1' } })
+      body: JSON.stringify({ data: { kind, authenticated: true, models, ...extra }, meta: { apiVersion: 'v1' } })
     });
   });
 }
@@ -176,6 +176,21 @@ test('can switch the provider backend and pick a model the harness reports', asy
   await page.getByRole('button', { name: 'Save provider' }).click();
   await expect(page.getByLabel('Backend provider')).toHaveValue('opencode');
   await expect(page.getByLabel('Model')).toHaveValue('opencode/big-pickle');
+});
+
+test('a provider that cannot list its models takes a typed model id', async ({ page, request }) => {
+  const project = await createProject(request, 'browser-open-catalog', 'Open catalog');
+  // `complete: false` means the list is a suggestion. The field has to accept an
+  // id that is not on it, or a model the CLI reaches fine is unreachable here.
+  await stubModels(page, [{ id: 'auto', label: 'auto — routed by task complexity' }], { complete: false });
+  await page.goto('/#/settings');
+  await page.getByLabel('Active project').selectOption(String(project.id));
+  await page.getByLabel('Backend provider').selectOption('codex');
+  await expect(page.getByLabel('Model')).toHaveJSProperty('tagName', 'INPUT');
+  await page.getByLabel('Model').fill('gpt-6-astra');
+  await page.getByRole('button', { name: 'Save provider' }).click();
+  await expect(page.getByLabel('Backend provider')).toHaveValue('codex');
+  await expect(page.getByLabel('Model')).toHaveValue('gpt-6-astra');
 });
 
 test('a configured model the harness cannot reach is shown as unavailable', async ({ page, request }) => {

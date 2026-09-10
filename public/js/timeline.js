@@ -1,4 +1,4 @@
-import { emptyState, escapeHtml, modelSelectOptions, providerModelDefault, providerName, showToast } from './components.js';
+import { emptyState, escapeHtml, modelField, providerName, showToast } from './components.js';
 import { bindPlanningReview, planningReview, planStaleness, planWarningPanel } from './features.js';
 
 // Warnings outlive a re-render: a live event stream re-renders the timeline
@@ -86,7 +86,7 @@ function renderMileRail(milestones, gating) {
 }
 
 function modelOptions(project, catalog) {
-  return modelSelectOptions(catalog, project.providerConfig?.model || '');
+  return modelField('draftModel', catalog, project.providerConfig?.model || '');
 }
 
 function runnable(node, timeline) {
@@ -176,7 +176,7 @@ export async function initTimeline(container, { project, api, onRunChanged }) {
     container.innerHTML = `
       <section class="goal-panel panel">
         <div><p class="eyebrow">${escapeHtml(providerName(project.providerKind))} planning</p><h2>Turn a goal into guided execution</h2><p>${escapeHtml(providerName(project.providerKind))} proposes milestones, dependencies, and gates. Nothing runs until the draft is accepted.</p></div>
-        <form id="goalForm" class="goal-form"><label class="sr-only" for="goalInput">Project goal</label><textarea id="goalInput" rows="2" placeholder="Describe the outcome, constraints, and review expectations…" required minlength="3"></textarea><div class="goal-options"><div class="field"><label for="draftModel">Draft model</label><select id="draftModel">${modelOptions(project, modelCatalog)}</select></div></div><button class="button primary" type="submit">Draft timeline</button></form>
+        <form id="goalForm" class="goal-form"><label class="sr-only" for="goalInput">Project goal</label><textarea id="goalInput" rows="2" placeholder="Describe the outcome, constraints, and review expectations…" required minlength="3"></textarea><div class="goal-options"><div class="field"><label for="draftModel">Draft model</label>${modelOptions(project, modelCatalog)}</div></div><button class="button primary" type="submit">Draft timeline</button></form>
         <div id="draftResult"></div>
       </section>
       <div id="planWarnings">${planWarningPanel(activePlanWarnings.get(project.id) || [])}</div>

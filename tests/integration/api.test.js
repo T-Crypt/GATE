@@ -16,7 +16,7 @@ import { TimelineService } from '../../server/application/timeline-service.js';
 import { createTestDatabase } from '../helpers/database.js';
 import { createGitFixture } from '../helpers/git.js';
 
-function setup() {
+function setup({ providers } = {}) {
   const database = createTestDatabase();
   const events = new EventStore(database.db);
   const projects = new ProjectService(database.db, events);
@@ -61,7 +61,8 @@ function setup() {
       dismiss: (projectId, itemKey) => ({ projectId, itemKey, dismissedAt: '2026-01-01 00:00:00' })
     },
     reviews: { get: () => ({ gates: [], evidence: [], approvals: [] }) },
-    dashboard: { summary: () => ({ issues: [], notes: [], gitEvents: [] }) }
+    dashboard: { summary: () => ({ issues: [], notes: [], gitEvents: [] }) },
+    providers
   };
   return {
     ...database,
@@ -352,6 +353,60 @@ test('readiness distinguishes process health from service readiness', async () =
     const ready = await request(fixture.app).get('/ready');
     assert.equal(ready.status, 200);
     assert.equal(ready.body.data.database, 'ready');
+  } finally {
+    fixture.close();
+  }
+});
+
+test('a model outside an enumerated catalog is rejected before it can fail at draft time', async () => {
+  const gitFixture = createGitFixture();
+  const fixture = setup({
+    providers: new Map([['enumerating', { listModels: async () => ({ authenticated: true, models: [{ id: 'known' }] }) }]])
+  });
+  try {
+    await request(fixture.app)
+      .post('/api/v1/projects')
+      .set('Idempotency-Key', 'catalog-project')
+      .send({ name: 'Catalog', repoPath: gitFixture.repoPath, baseBranch: 'main' });
+
+    const rejected = await request(fixture.app)
+      .patch('/api/v1/projects/1/provider')
+      .set('Idempotency-Key', 'catalog-reject')
+      .send({ providerKind: 'enumerating', providerConfig: { model: 'invented' } });
+
+    assert.equal(rejected.status, 422);
+    assert.equal(rejected.body.error.code, 'UNKNOWN_MODEL');
+    assert.deepEqual(rejected.body.error.details.available, ['known']);
+  } finally {
+    fixture.close();
+  }
+});
+
+test('a provider that cannot list its models accepts any id the user supplies', async () => {
+  const gitFixture = createGitFixture();
+  const fixture = setup({
+    providers: new Map([
+      [
+        'suggesting',
+        // `complete: false` marks the list as suggestions. Rejecting an id that
+        // is merely absent from it would block models the CLI reaches fine.
+        { listModels: async () => ({ authenticated: true, complete: false, models: [{ id: 'suggested' }] }) }
+      ]
+    ])
+  });
+  try {
+    await request(fixture.app)
+      .post('/api/v1/projects')
+      .set('Idempotency-Key', 'suggest-project')
+      .send({ name: 'Suggest', repoPath: gitFixture.repoPath, baseBranch: 'main' });
+
+    const accepted = await request(fixture.app)
+      .patch('/api/v1/projects/1/provider')
+      .set('Idempotency-Key', 'suggest-accept')
+      .send({ providerKind: 'suggesting', providerConfig: { model: 'gpt-6-astra' } });
+
+    assert.equal(accepted.status, 200);
+    assert.equal(accepted.body.data.providerConfig.model, 'gpt-6-astra');
   } finally {
     fixture.close();
   }
