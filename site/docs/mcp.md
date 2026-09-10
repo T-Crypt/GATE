@@ -163,4 +163,4 @@ There is no MCP approval tool. This is intentional: an agent can report evidence
 
 ## Multi-provider note
 
-The MCP server and its tool set are provider-agnostic already; nothing here assumes Claude specifically. Each project's `providerKind` decides which adapter (`server/adapters/providers/claude.js` or `opencode.js`) drafts timelines and runs timeline steps — see [Provider adapters]({% link docs/providers.md %}). Connecting a different agent over MCP works today, and that same agent can be the one Gate schedules to execute a step once its `providerKind` is configured in the Settings page.
+The MCP server and its tool set are provider-agnostic already; nothing here assumes Claude specifically. Each project's `providerKind` decides which adapter in `server/adapters/providers/` drafts timelines and runs timeline steps — see [Provider adapters]({% link docs/providers.md %}). Connecting a different agent over MCP works today, and that same agent can be the one Gate schedules to execute a step once its `providerKind` is configured in the Settings page.

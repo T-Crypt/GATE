@@ -10,7 +10,7 @@ Requirements, npm scripts, environment configuration, the on-disk data layout, a
 
 - Node.js 24+
 - Git
-- A provider CLI authenticated locally — the Claude adapter invokes the `claude` executable; OpenCode support is the same contract
+- A provider CLI authenticated locally — one of `claude`, `opencode`, `codex`, `gemini`, `cursor-agent`, or `copilot`. Each adapter invokes that executable directly and uses the CLI's own login; see [Provider adapters]({% link docs/providers.md %})
 
 ## Install and run
 
@@ -52,6 +52,8 @@ All configuration is via environment variables (see `.env.example`):
 | `OPENCODE_BIN_PATH` | *(unset)* | Windows-only override for the native OpenCode executable (see [Provider adapters]({% link docs/providers.md %})). |
 
 > Tokens are read from the environment, never from project configuration or the database. Gate holds no credentials itself.
+
+> Provider credentials belong to the provider CLI, not to Gate. Every adapter inherits the server's environment and relies on that CLI's own login. Two variables are read only as a signed-in *signal*, never sent anywhere: `GEMINI_API_KEY`/`GOOGLE_API_KEY` for the Gemini adapter, and `COPILOT_GITHUB_TOKEN`/`GH_TOKEN`/`GITHUB_TOKEN` for the Copilot adapter — see [Provider adapters]({% link docs/providers.md %}).
 
 > `ALLOW_REMOTE_BIND` is the acceptance-boundary escape hatch: with it unset (the default) the server refuses to bind to anything but a loopback address, which is what keeps plan acceptance and gate decisions on the localhost human-facing interface. Setting it `true` exposes the HTTP surface to the network — only do that on a trusted host.
 

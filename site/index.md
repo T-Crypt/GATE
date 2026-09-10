@@ -53,7 +53,7 @@ Open `http://127.0.0.1:4177`, connect an existing Git repository, describe a goa
 - [Setup & Operations]({{ site.baseurl }}/docs/setup/) — requirements, npm scripts, environment variables, data layout, backups
 - [Architecture]({{ site.baseurl }}/docs/architecture/) — process layout, domain/adapter boundary, execution flow
 - [Project intelligence]({{ site.baseurl }}/docs/project-intelligence/) — GATE Memory, the Context Compiler, and feature planning
-- [Provider adapters]({{ site.baseurl }}/docs/providers/) — the Claude and OpenCode adapters and the provider contract
+- [Provider adapters]({{ site.baseurl }}/docs/providers/) — the six shipped agent-CLI adapters and the provider contract
 - [MCP interface]({{ site.baseurl }}/docs/mcp/) — tools, idempotency keys, and what is deliberately absent
 - [Event log]({{ site.baseurl }}/docs/events/) — append-only events, replay, and event families
 - [Troubleshooting]({{ site.baseurl }}/docs/troubleshooting/) — health endpoints, error codes, and recovery

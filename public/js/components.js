@@ -5,11 +5,41 @@ export function escapeHtml(value) {
 }
 
 export function providerName(kind) {
-  return ({ claude: 'Claude Code', opencode: 'OpenCode' })[kind] || kind || 'Provider';
+  return ({
+    claude: 'Claude Code',
+    opencode: 'OpenCode',
+    codex: 'Codex',
+    gemini: 'Gemini CLI',
+    cursor: 'Cursor Agent',
+    copilot: 'Copilot CLI'
+  })[kind] || kind || 'Provider';
 }
 
+// What a blank model resolves to, phrased for the hint under the model field.
+// Most CLIs pick their own default from their own config; only OpenCode and
+// Gemini have one Gate can name.
 export function providerModelDefault(kind) {
-  return { claude: '', opencode: 'opencode/big-pickle' }[kind] || '';
+  return (
+    {
+      opencode: 'opencode/big-pickle',
+      gemini: 'auto',
+      codex: 'the model in ~/.codex/config.toml'
+    }[kind] || 'the CLI default'
+  );
+}
+
+// A provider that can enumerate its models gets a closed <select>. One that
+// cannot reports `complete: false`, and gets a combobox instead: the suggestions
+// still show, but a model Gate has never heard of can be typed in rather than
+// being unreachable because the adapter could not list it.
+export function modelField(id, catalog, selected) {
+  if (catalog.complete !== false) {
+    return `<select id="${escapeHtml(id)}">${modelSelectOptions(catalog, selected)}</select>`;
+  }
+  const options = catalog.models
+    .map((model) => `<option value="${escapeHtml(model.id)}">${escapeHtml(model.label || model.id)}</option>`)
+    .join('');
+  return `<input id="${escapeHtml(id)}" list="${escapeHtml(id)}Options" value="${escapeHtml(selected || '')}" placeholder="Provider default" autocomplete="off" spellcheck="false"><datalist id="${escapeHtml(id)}Options">${options}</datalist>`;
 }
 
 export function emptyState(mark, title, description, action = '') {
