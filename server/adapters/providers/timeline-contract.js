@@ -4,6 +4,13 @@
 // authority on what Gate accepts. Everything here must stay aligned with it:
 // a draft that satisfies this schema must survive normalization, otherwise the
 // provider round-trips for ~30s and the draft is rejected before it is stored.
+//
+// The schema is also handed to CLIs that forward it as an OpenAI strict
+// structured output, which rejects a schema whose `required` omits any declared
+// property. So every property is listed in `required` and the optional ones are
+// unioned with `null` instead — the documented way to spell "optional" under
+// strict mode. Normalization already coerces each of those nulls to the default
+// it wants, so nothing downstream had to change to accept them.
 
 const NODE_KINDS = ['milestone', 'step'];
 const EDGE_TYPES = [
@@ -28,18 +35,18 @@ export const timelineSchema = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['id', 'key', 'kind', 'title'],
+        required: ['id', 'key', 'kind', 'title', 'description', 'parentId', 'ordinal'],
         properties: {
           id: { type: 'string', description: 'Stable id referenced by parentId, edges, and gates' },
           key: { type: 'string', description: 'Short unique display key, e.g. M1 or M1.2' },
           kind: { type: 'string', enum: NODE_KINDS },
           title: { type: 'string' },
-          description: { type: 'string' },
+          description: { type: ['string', 'null'] },
           parentId: {
             type: ['string', 'null'],
             description: 'Required on step nodes: the id of the milestone node it belongs to'
           },
-          ordinal: { type: 'integer' }
+          ordinal: { type: ['integer', 'null'] }
         }
       }
     },
@@ -61,13 +68,13 @@ export const timelineSchema = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['nodeId', 'type', 'title'],
+        required: ['nodeId', 'type', 'title', 'blocking', 'requiredEvidence'],
         properties: {
           nodeId: { type: 'string' },
           type: { type: 'string', enum: GATE_KINDS },
           title: { type: 'string' },
-          blocking: { type: 'boolean' },
-          requiredEvidence: { type: 'array', items: { type: 'string' } }
+          blocking: { type: ['boolean', 'null'] },
+          requiredEvidence: { type: ['array', 'null'], items: { type: 'string' } }
         }
       }
     }

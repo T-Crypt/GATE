@@ -25,12 +25,61 @@ function schemaShapedDraft() {
 
 test('the provider schema requires every field normalization demands', () => {
   const node = timelineSchema.properties.nodes.items;
-  assert.deepEqual(node.required, ['id', 'key', 'kind', 'title']);
+  assert.deepEqual(node.required, ['id', 'key', 'kind', 'title', 'description', 'parentId', 'ordinal']);
   assert.deepEqual(node.properties.kind.enum, ['milestone', 'step']);
   assert.deepEqual(timelineSchema.properties.edges.items.required, ['fromNodeId', 'toNodeId', 'type']);
-  assert.deepEqual(timelineSchema.properties.gates.items.required, ['nodeId', 'type', 'title']);
+  assert.deepEqual(timelineSchema.properties.gates.items.required, [
+    'nodeId',
+    'type',
+    'title',
+    'blocking',
+    'requiredEvidence'
+  ]);
   assert.ok(timelineSchema.properties.edges.items.properties.type.enum.includes('depends_on'));
   assert.ok(timelineSchema.properties.gates.items.properties.type.enum.includes('approval'));
+});
+
+// Codex forwards this schema as an OpenAI strict structured output, which errors
+// on a schema whose `required` omits a declared property — so the draft never
+// happens rather than failing validation. Walk the whole schema instead of
+// pinning three lists, so a new property cannot be added without being required.
+test('every object in the provider schema satisfies strict structured-output rules', () => {
+  const objects = [];
+  (function walk(schema) {
+    if (!schema || typeof schema !== 'object') return;
+    if (schema.type === 'object') objects.push(schema);
+    if (schema.properties) Object.values(schema.properties).forEach(walk);
+    if (schema.items) walk(schema.items);
+  })(timelineSchema);
+
+  assert.equal(objects.length, 4, 'root, node, edge, and gate objects');
+  for (const schema of objects) {
+    assert.equal(schema.additionalProperties, false);
+    assert.deepEqual(
+      [...(schema.required ?? [])].sort(),
+      Object.keys(schema.properties).sort(),
+      `required must list every property of ${Object.keys(schema.properties).join(',')}`
+    );
+  }
+});
+
+// The price of requiring every field is that a provider may now send an explicit
+// null for one Gate treats as optional. Normalization has to absorb all of them.
+test('a draft that sends null for every optional field still normalizes', () => {
+  const graph = normalizeTimelineGraph({
+    nodes: [
+      { id: 'm1', key: 'M1', kind: 'milestone', title: 'Foundation', description: null, parentId: null, ordinal: null },
+      { id: 's1', key: 'M1.1', kind: 'step', title: 'Scaffold', description: null, parentId: 'm1', ordinal: null }
+    ],
+    edges: [{ fromNodeId: 'm1', toNodeId: 's1', type: 'depends_on' }],
+    gates: [{ nodeId: 's1', type: 'test', title: 'Suite green', blocking: null, requiredEvidence: null }]
+  });
+  assert.equal(graph.nodes[0].description, '');
+  assert.equal(graph.nodes[0].ordinal, 0);
+  assert.equal(graph.nodes[1].ordinal, 1);
+  assert.deepEqual(graph.gates[0].requiredEvidence, []);
+  // `blocking: null` must not read as "non-blocking" — a gate defaults to blocking.
+  assert.equal(graph.gates[0].blocking, true);
 });
 
 test('a schema-shaped draft normalizes without error', () => {
