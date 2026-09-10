@@ -212,6 +212,42 @@ test('memory routes refresh and search the local file graph', async () => {
     assert.deepEqual(impact.body.data.dependents.map((item) => item.path), ['src/consumer.js']);
     assert.ok(impact.body.data.edges.some((edge) => edge.type === 'REFERENCES'));
 
+    const explained = await request(fixture.app).get(
+      `/api/v1/projects/${projectId}/memory/nodes/${encodeURIComponent(symbols.body.data.items[0].id)}/explain?q=stream`
+    );
+    assert.equal(explained.status, 200);
+    assert.equal(explained.body.data.matched, true);
+    assert.equal(explained.body.data.sourceLocation, 'src/provider.js:1');
+    assert.ok(explained.body.data.relationships.some((relation) => relation.type === 'REFERENCES'));
+
+    const central = await request(fixture.app).get(`/api/v1/projects/${projectId}/memory/god-nodes?edgeTypes=IMPORTS`);
+    assert.equal(central.status, 200);
+    assert.deepEqual(central.body.data.edgeTypes, ['IMPORTS']);
+    assert.equal(central.body.data.items[0].path, 'src/provider.js');
+
+    const grouped = await request(fixture.app).get(`/api/v1/projects/${projectId}/memory/communities`);
+    assert.equal(grouped.status, 200);
+    assert.equal(grouped.body.data.count, 1);
+    assert.ok(grouped.body.data.items[0].members.some((node) => node.path === 'src/consumer.js'));
+
+    const providerFile = search.body.data.items.find((item) => item.path === 'src/provider.js')
+      || (await request(fixture.app).get(`/api/v1/projects/${projectId}/memory/search?q=provider.js&type=file`)).body.data.items[0];
+    const consumerFile = (await request(fixture.app).get(`/api/v1/projects/${projectId}/memory/search?q=consumer.js&type=file`)).body.data.items[0];
+    const walked = await request(fixture.app).get(
+      `/api/v1/projects/${projectId}/memory/path?from=${encodeURIComponent(consumerFile.id)}&to=${encodeURIComponent(providerFile.id)}&edgeTypes=IMPORTS`
+    );
+    assert.equal(walked.status, 200);
+    assert.equal(walked.body.data.hops, 1);
+    assert.deepEqual(walked.body.data.nodes.map((node) => node.path), ['src/consumer.js', 'src/provider.js']);
+
+    const answered = await request(fixture.app).get(
+      `/api/v1/projects/${projectId}/memory/query?q=${encodeURIComponent('what depends on stream?')}&budget=2000`
+    );
+    assert.equal(answered.status, 200);
+    assert.ok(answered.body.data.citations.length > 0);
+    assert.ok(answered.body.data.citations.every((item) => item.sourceLocation));
+    assert.ok(answered.body.data.estimatedTokens <= 2000);
+
     const compiled = await request(fixture.app)
       .post(`/api/v1/projects/${projectId}/memory/context`)
       .set('Idempotency-Key', 'compile-memory-context')

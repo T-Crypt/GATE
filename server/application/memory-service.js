@@ -1,9 +1,20 @@
 import { runIdempotent } from './idempotency.js';
 import { MemoryIndexService } from './memory-index-service.js';
 import { SemanticSearchService } from './semantic-search-service.js';
-import { notFound, validation } from '../domain/errors.js';
+import { estimateTokens, trimToBudget } from './token-budget.js';
+import { AppError, notFound, validation } from '../domain/errors.js';
 
 const EDGE_TYPES = new Set(['CONTAINS', 'IMPORTS', 'REFERENCES']);
+// Containment alone connects every indexed path back to the repository root, so
+// structural questions about how code groups and relates ask about the edges a
+// developer actually reasons over.
+const RELATION_EDGE_TYPES = ['IMPORTS', 'REFERENCES'];
+// Centrality and community detection load the whole graph into memory. Real
+// repositories stay far below this; anything larger is reported as truncated
+// rather than silently analyzed in part.
+const GRAPH_NODE_CAP = 5000;
+const MAX_PATH_HOPS = 6;
+const AFFECTED_QUESTION = /\b(affect|affected|impact|impacts|break|breaks|depend|depends|dependent|dependents|consumer|consumers|blast radius)\b/i;
 
 function decodeNode(row) {
   if (!row) return row;
@@ -41,6 +52,50 @@ function limit(value, maximum = 100) {
 
 function uniqueNodes(nodes) {
   return [...new Map(nodes.map((node) => [node.id, node])).values()];
+}
+
+// Every claim Gate makes about the graph cites a repository location: symbols
+// carry the line they were parsed from, everything else carries its path.
+function sourceLocation(node) {
+  if (node.type === 'symbol') return `${node.sourcePath}:${node.metadata.line}`;
+  return node.path || node.name;
+}
+
+function nodeLabel(node) {
+  if (node.type === 'symbol') return `${node.name} (${node.metadata.kind}) at ${sourceLocation(node)}`;
+  return node.path || node.name;
+}
+
+function citation(node, extra = {}) {
+  return {
+    nodeId: node.id,
+    type: node.type,
+    name: node.name,
+    path: node.path,
+    sourcePath: node.sourcePath,
+    sourceLocation: sourceLocation(node),
+    origin: node.provenance.origin,
+    ...extra
+  };
+}
+
+function directoryOf(node) {
+  const target = node.type === 'symbol' ? node.sourcePath : node.path;
+  const cut = String(target || '').lastIndexOf('/');
+  return cut === -1 ? '' : target.slice(0, cut);
+}
+
+function commonPrefix(paths) {
+  if (!paths.length) return '';
+  const segments = paths.map((value) => value.split('/'));
+  const shortest = Math.min(...segments.map((parts) => parts.length));
+  const shared = [];
+  for (let index = 0; index < shortest; index += 1) {
+    const candidate = segments[0][index];
+    if (!segments.every((parts) => parts[index] === candidate)) break;
+    shared.push(candidate);
+  }
+  return shared.join('/');
 }
 
 export class MemoryService {
@@ -213,10 +268,7 @@ export class MemoryService {
     const root = this.db.prepare('SELECT * FROM memory_nodes WHERE project_id = ? AND id = ?').get(projectId, nodeId);
     if (!root) throw notFound('Memory node', nodeId);
     const maxDepth = Math.max(1, Math.min(Number(depth) || 1, 4));
-    const selectedEdgeTypes = edgeTypes?.length ? [...new Set(edgeTypes.map((type) => String(type).toUpperCase()))] : [...EDGE_TYPES];
-    if (selectedEdgeTypes.some((type) => !EDGE_TYPES.has(type))) {
-      throw validation('Unknown memory edge type', { edgeTypes: selectedEdgeTypes });
-    }
+    const selectedEdgeTypes = this.#edgeTypes(edgeTypes);
     const seen = new Set([nodeId]);
     const edges = new Map();
     let frontier = [nodeId];
@@ -310,6 +362,360 @@ export class MemoryService {
       symbols: matchedSymbols,
       edges: [...edgeMap.values()],
       reasons
+    };
+  }
+
+  #edgeTypes(edgeTypes, fallback = [...EDGE_TYPES]) {
+    const selected = edgeTypes?.length ? [...new Set(edgeTypes.map((type) => String(type).toUpperCase()))] : [...fallback];
+    if (selected.some((type) => !EDGE_TYPES.has(type))) {
+      throw validation('Unknown memory edge type', { edgeTypes: selected });
+    }
+    return selected;
+  }
+
+  #edgesTouching(projectId, frontier, edgeTypes) {
+    const nodePlaceholders = frontier.map(() => '?').join(',');
+    const typePlaceholders = edgeTypes.map(() => '?').join(',');
+    return this.db.prepare(
+      `SELECT * FROM memory_edges WHERE project_id = ? AND edge_type IN (${typePlaceholders})
+       AND (source_node_id IN (${nodePlaceholders}) OR target_node_id IN (${nodePlaceholders}))`
+    ).all(projectId, ...edgeTypes, ...frontier, ...frontier).map(decodeEdge);
+  }
+
+  // Whole-graph analysis loads persisted rows only. Nothing here infers an edge
+  // the indexer did not record.
+  #graph(projectId, edgeTypes, fallback) {
+    const selected = this.#edgeTypes(edgeTypes, fallback);
+    const totalNodes = this.db.prepare('SELECT COUNT(*) AS total FROM memory_nodes WHERE project_id = ?').get(projectId).total;
+    const rows = this.db.prepare('SELECT * FROM memory_nodes WHERE project_id = ? ORDER BY path LIMIT ?').all(projectId, GRAPH_NODE_CAP);
+    const nodes = rows.map(decodeNode);
+    const byId = new Map(nodes.map((node) => [node.id, node]));
+    const edges = this.db.prepare(
+      `SELECT * FROM memory_edges WHERE project_id = ? AND edge_type IN (${selected.map(() => '?').join(',')})`
+    ).all(projectId, ...selected).map(decodeEdge)
+      .filter((edge) => byId.has(edge.sourceNodeId) && byId.has(edge.targetNodeId));
+    return { nodes, byId, edges, edgeTypes: selected, totalNodes, truncated: totalNodes > nodes.length };
+  }
+
+  #degrees(graph) {
+    const degrees = new Map(graph.nodes.map((node) => [node.id, { in: 0, out: 0 }]));
+    for (const edge of graph.edges) {
+      degrees.get(edge.sourceNodeId).out += 1;
+      degrees.get(edge.targetNodeId).in += 1;
+    }
+    return degrees;
+  }
+
+  explain(projectId, nodeId, { query } = {}) {
+    this.projects.get(projectId);
+    const row = this.db.prepare('SELECT * FROM memory_nodes WHERE project_id = ? AND id = ?').get(projectId, nodeId);
+    if (!row) throw notFound('Memory node', nodeId);
+    const node = decodeNode(row);
+    const normalized = String(query || '').trim();
+    const match = normalized
+      ? this.search(projectId, { query: normalized, limit: 50 }).items.find((item) => item.id === nodeId)
+      : undefined;
+    const graph = this.neighbors(projectId, nodeId, { depth: 1 });
+    const related = new Map(graph.nodes.map((item) => [item.id, item]));
+    const relationships = graph.edges.map((edge) => {
+      const outgoing = edge.sourceNodeId === nodeId;
+      const other = related.get(outgoing ? edge.targetNodeId : edge.sourceNodeId);
+      return {
+        edgeId: edge.id,
+        type: edge.type,
+        direction: outgoing ? 'outgoing' : 'incoming',
+        origin: edge.provenance.origin,
+        nodeId: other?.id ?? (outgoing ? edge.targetNodeId : edge.sourceNodeId),
+        sourceLocation: other ? sourceLocation(other) : null,
+        label: other ? nodeLabel(other) : null
+      };
+    });
+    const counts = relationships.reduce((totals, relation) => ({ ...totals, [relation.type]: (totals[relation.type] || 0) + 1 }), {});
+    const statements = [
+      `${nodeLabel(node)} is indexed as a ${node.type} node from ${node.provenance.origin === 'static_parser' ? 'static source parsing' : 'repository filesystem indexing'} at revision ${node.indexedSha.slice(0, 12)}.`
+    ];
+    if (normalized) {
+      statements.push(match
+        ? `It matched “${normalized}” by ${match.matchStrategy} ranking: ${match.matchReasons.join('; ')}.`
+        : `It is not among the current search results for “${normalized}”.`);
+    }
+    statements.push(relationships.length
+      ? `It carries ${relationships.length} recorded edge${relationships.length === 1 ? '' : 's'} (${Object.entries(counts).map(([type, count]) => `${count} ${type}`).join(', ')}).`
+      : 'It has no recorded structural edges.');
+    return {
+      projectId,
+      node,
+      sourceLocation: sourceLocation(node),
+      query: normalized,
+      matched: Boolean(match),
+      matchStrategy: match?.matchStrategy || null,
+      score: match?.score ?? null,
+      matchReasons: match?.matchReasons || [],
+      provenance: node.provenance,
+      relationships,
+      edgeCounts: counts,
+      summary: statements.join(' ')
+    };
+  }
+
+  godNodes(projectId, { limit: requestedLimit, edgeTypes } = {}) {
+    this.projects.get(projectId);
+    const graph = this.#graph(projectId, edgeTypes);
+    const degrees = this.#degrees(graph);
+    const items = graph.nodes
+      .map((node) => {
+        const degree = degrees.get(node.id);
+        return { ...node, sourceLocation: sourceLocation(node), inDegree: degree.in, outDegree: degree.out, degree: degree.in + degree.out };
+      })
+      .filter((node) => node.degree > 0)
+      .sort((left, right) => right.degree - left.degree || right.inDegree - left.inDegree || left.path.localeCompare(right.path))
+      .slice(0, limit(requestedLimit, 100));
+    return {
+      projectId,
+      edgeTypes: graph.edgeTypes,
+      analyzedNodes: graph.nodes.length,
+      totalNodes: graph.totalNodes,
+      truncated: graph.truncated,
+      items
+    };
+  }
+
+  communities(projectId, { limit: requestedLimit, edgeTypes, members: requestedMembers } = {}) {
+    this.projects.get(projectId);
+    const graph = this.#graph(projectId, edgeTypes, RELATION_EDGE_TYPES);
+    const degrees = this.#degrees(graph);
+    const parent = new Map(graph.nodes.map((node) => [node.id, node.id]));
+    const find = (start) => {
+      let root = start;
+      while (parent.get(root) !== root) root = parent.get(root);
+      let cursor = start;
+      while (parent.get(cursor) !== root) {
+        const next = parent.get(cursor);
+        parent.set(cursor, root);
+        cursor = next;
+      }
+      return root;
+    };
+    for (const edge of graph.edges) {
+      const left = find(edge.sourceNodeId);
+      const right = find(edge.targetNodeId);
+      if (left !== right) parent.set(left, right);
+    }
+    const grouped = new Map();
+    for (const node of graph.nodes) {
+      const root = find(node.id);
+      if (!grouped.has(root)) grouped.set(root, []);
+      grouped.get(root).push(node);
+    }
+    const memberCap = limit(requestedMembers ?? 10, 100);
+    const connected = [...grouped.values()].filter((group) => group.length > 1);
+    const items = connected
+      .sort((left, right) => right.length - left.length)
+      .slice(0, limit(requestedLimit, 50))
+      .map((group, index) => {
+        const ranked = [...group].sort((left, right) => (degrees.get(right.id).in + degrees.get(right.id).out) - (degrees.get(left.id).in + degrees.get(left.id).out) || left.path.localeCompare(right.path));
+        const directories = [...new Set(group.map(directoryOf).filter(Boolean))];
+        return {
+          id: `community-${index + 1}`,
+          size: group.length,
+          label: commonPrefix(directories) || nodeLabel(ranked[0]),
+          directories: directories.slice(0, 10),
+          members: ranked.slice(0, memberCap).map((node) => ({
+            ...node,
+            sourceLocation: sourceLocation(node),
+            degree: degrees.get(node.id).in + degrees.get(node.id).out
+          }))
+        };
+      });
+    return {
+      projectId,
+      edgeTypes: graph.edgeTypes,
+      analyzedNodes: graph.nodes.length,
+      totalNodes: graph.totalNodes,
+      truncated: graph.truncated,
+      count: connected.length,
+      isolatedNodes: grouped.size - connected.length,
+      items
+    };
+  }
+
+  // Bidirectional breadth-first search over persisted edges. Expansion always
+  // grows the smaller side and stops at the hop cap rather than walking the
+  // whole repository looking for a link that is not recorded.
+  path(projectId, fromNodeId, toNodeId, { edgeTypes, maxHops } = {}) {
+    this.projects.get(projectId);
+    const read = (id) => {
+      const row = this.db.prepare('SELECT * FROM memory_nodes WHERE project_id = ? AND id = ?').get(projectId, id);
+      if (!row) throw notFound('Memory node', id);
+      return decodeNode(row);
+    };
+    const from = read(fromNodeId);
+    const to = read(toNodeId);
+    const selected = this.#edgeTypes(edgeTypes);
+    const cap = Math.max(1, Math.min(Number(maxHops) || MAX_PATH_HOPS, MAX_PATH_HOPS));
+    if (fromNodeId === toNodeId) {
+      return { projectId, from, to, hops: 0, edgeTypes: selected, nodes: [{ ...from, sourceLocation: sourceLocation(from) }], edges: [] };
+    }
+
+    const forward = new Map([[fromNodeId, null]]);
+    const backward = new Map([[toNodeId, null]]);
+    let forwardFrontier = [fromNodeId];
+    let backwardFrontier = [toNodeId];
+    let forwardHops = 0;
+    let backwardHops = 0;
+    let meeting = null;
+    while (!meeting && forwardHops + backwardHops < cap) {
+      const growForward = forwardFrontier.length > 0 && (backwardFrontier.length === 0 || forwardFrontier.length <= backwardFrontier.length);
+      const frontier = growForward ? forwardFrontier : backwardFrontier;
+      if (!frontier.length) break;
+      const visited = growForward ? forward : backward;
+      const opposite = growForward ? backward : forward;
+      const frontierSet = new Set(frontier);
+      const next = [];
+      for (const edge of this.#edgesTouching(projectId, frontier, selected)) {
+        for (const [near, far] of [[edge.sourceNodeId, edge.targetNodeId], [edge.targetNodeId, edge.sourceNodeId]]) {
+          if (!frontierSet.has(near) || visited.has(far)) continue;
+          visited.set(far, { previous: near, edge });
+          next.push(far);
+          if (opposite.has(far) && !meeting) meeting = far;
+        }
+      }
+      if (growForward) {
+        forwardFrontier = next;
+        forwardHops += 1;
+      } else {
+        backwardFrontier = next;
+        backwardHops += 1;
+      }
+    }
+    if (!meeting) {
+      throw new AppError('MEMORY_PATH_NOT_FOUND', `No recorded path between the two memory nodes within ${cap} hops`, {
+        status: 404,
+        details: { fromNodeId, toNodeId, maxHops: cap, edgeTypes: selected }
+      });
+    }
+
+    const orderedIds = [meeting];
+    const edges = [];
+    for (let cursor = forward.get(meeting); cursor; cursor = forward.get(cursor.previous)) {
+      orderedIds.unshift(cursor.previous);
+      edges.unshift(cursor.edge);
+    }
+    for (let cursor = backward.get(meeting); cursor; cursor = backward.get(cursor.previous)) {
+      orderedIds.push(cursor.previous);
+      edges.push(cursor.edge);
+    }
+    const rows = this.db.prepare(
+      `SELECT * FROM memory_nodes WHERE project_id = ? AND id IN (${orderedIds.map(() => '?').join(',')})`
+    ).all(projectId, ...orderedIds).map(decodeNode);
+    const byId = new Map(rows.map((node) => [node.id, node]));
+    return {
+      projectId,
+      from,
+      to,
+      hops: edges.length,
+      edgeTypes: selected,
+      nodes: orderedIds.map((id) => ({ ...byId.get(id), sourceLocation: sourceLocation(byId.get(id)) })),
+      edges
+    };
+  }
+
+  // The natural-language entry point: seed with retrieval, widen along recorded
+  // edges only, and answer with citations back to repository locations.
+  query(projectId, { question, budget } = {}) {
+    this.projects.get(projectId);
+    const normalized = String(question || '').trim();
+    if (!normalized) throw validation('question is required', { field: 'question' });
+    const tokenBudget = Math.max(256, Math.min(Math.trunc(Number(budget) || 2000), 32_000));
+    const search = this.search(projectId, { query: normalized, limit: 12 });
+    const wantsImpact = AFFECTED_QUESTION.test(normalized);
+    const impact = wantsImpact && search.items.length ? this.impact(projectId, { query: normalized, limit: 25 }) : null;
+
+    const cited = new Map();
+    const edges = new Map();
+    const record = (node, relevance, reasons) => {
+      const existing = cited.get(node.id);
+      if (existing) {
+        existing.reasons = [...new Set([...existing.reasons, ...reasons])];
+        existing.relevance = Math.max(existing.relevance, relevance);
+        return;
+      }
+      cited.set(node.id, citation(node, { relevance, reasons: [...new Set(reasons)] }));
+    };
+    for (const item of search.items) record(item, item.score, item.matchReasons);
+    for (const seed of search.items.slice(0, 5)) {
+      const graph = this.neighbors(projectId, seed.id, { depth: 1 });
+      for (const edge of graph.edges) edges.set(edge.id, edge);
+      for (const node of graph.nodes) {
+        if (node.id === seed.id) continue;
+        record(node, seed.score * 0.5, [`Connected to ${nodeLabel(seed)} by a recorded edge`]);
+      }
+    }
+    if (impact) {
+      for (const edge of impact.edges) edges.set(edge.id, edge);
+      for (const node of [...impact.declaringFiles, ...impact.dependents, ...impact.tests]) {
+        record(node, 0.8, impact.reasons[node.id] || ['Reached through recorded import or reference edges']);
+      }
+    }
+
+    const citations = [...cited.values()].sort((left, right) => right.relevance - left.relevance || left.sourceLocation.localeCompare(right.sourceLocation));
+    const top = search.items[0];
+    const statements = [];
+    if (!top) {
+      statements.push({ text: `GATE Memory has no indexed node matching “${normalized}”.`, nodeIds: [] });
+    } else {
+      statements.push({
+        text: `The closest indexed match for “${normalized}” is ${nodeLabel(top)}, retrieved by ${top.matchStrategy} ranking (${top.matchReasons.join('; ')}).`,
+        nodeIds: [top.id]
+      });
+      const edgeCounts = [...edges.values()].reduce((totals, edge) => ({ ...totals, [edge.type]: (totals[edge.type] || 0) + 1 }), {});
+      if (edges.size) {
+        statements.push({
+          text: `Its neighborhood holds ${edges.size} recorded edge${edges.size === 1 ? '' : 's'} (${Object.entries(edgeCounts).map(([type, count]) => `${count} ${type}`).join(', ')}).`,
+          nodeIds: [top.id]
+        });
+      }
+      if (impact) {
+        statements.push({
+          text: `Structural impact is ${impact.risk}: ${impact.dependents.length} production dependent${impact.dependents.length === 1 ? '' : 's'} and ${impact.tests.length} test${impact.tests.length === 1 ? '' : 's'} reach it through import and reference edges.`,
+          nodeIds: [...impact.dependents, ...impact.tests].map((node) => node.id)
+        });
+      }
+    }
+
+    // trimToBudget mutates the payload it is handed, so the pre-trim totals are
+    // captured before the loop can shorten them.
+    const totalCitations = citations.length;
+    const payload = trimToBudget(
+      { projectId, question: normalized, statements, citations, edges: [...edges.values()].map((edge) => ({ id: edge.id, type: edge.type, sourceNodeId: edge.sourceNodeId, targetNodeId: edge.targetNodeId, origin: edge.provenance.origin })) },
+      tokenBudget,
+      [
+        (value) => {
+          if (value.citations.length <= 1) return false;
+          value.citations.pop();
+          return true;
+        },
+        (value) => {
+          if (!value.edges.length) return false;
+          value.edges.pop();
+          return true;
+        },
+        (value) => {
+          if (value.statements.length <= 1) return false;
+          value.statements.pop();
+          return true;
+        }
+      ],
+      (value) => value
+    );
+    const keptIds = new Set(payload.citations.map((item) => item.nodeId));
+    payload.edges = payload.edges.filter((edge) => keptIds.has(edge.sourceNodeId) && keptIds.has(edge.targetNodeId));
+    return {
+      ...payload,
+      answer: payload.statements.map((statement) => statement.text).join(' '),
+      tokenBudget,
+      estimatedTokens: estimateTokens(payload),
+      truncated: payload.citations.length < totalCitations
     };
   }
 }

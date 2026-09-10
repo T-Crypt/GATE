@@ -33,6 +33,7 @@ function handler(action) {
 
 const projectId = z.number().int().positive();
 const idempotencyKey = z.string().trim().min(1).max(200);
+const memoryEdgeTypes = z.array(z.enum(['CONTAINS', 'IMPORTS', 'REFERENCES'])).max(3).optional();
 const graph = z.object({
   nodes: z.array(z.looseObject({})).max(2000),
   edges: z.array(z.looseObject({})).max(5000),
@@ -270,7 +271,7 @@ export function registerTools(server, services) {
         projectId,
         nodeId: z.string().trim().min(1).max(500),
         depth: z.number().int().positive().max(4).optional(),
-        edgeTypes: z.array(z.enum(['CONTAINS', 'IMPORTS', 'REFERENCES'])).max(3).optional()
+        edgeTypes: memoryEdgeTypes
       },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
@@ -285,6 +286,77 @@ export function registerTools(server, services) {
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
     handler(({ projectId: id, ...input }) => services.memory.impact(id, input))
+  );
+
+  server.registerTool(
+    'memory_explain',
+    {
+      description: 'Explain why one memory node is relevant: what matched an optional query, which recorded edges connect it, and where the fact came from.',
+      inputSchema: {
+        projectId,
+        nodeId: z.string().trim().min(1).max(500),
+        query: z.string().trim().min(1).max(500).optional()
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, nodeId, query }) => services.memory.explain(id, nodeId, { query }))
+  );
+
+  server.registerTool(
+    'memory_god_nodes',
+    {
+      description: 'Rank the structurally central nodes of the project graph by recorded in and out degree.',
+      inputSchema: { projectId, limit: z.number().int().positive().max(100).optional(), edgeTypes: memoryEdgeTypes },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, ...input }) => services.memory.godNodes(id, input))
+  );
+
+  server.registerTool(
+    'memory_communities',
+    {
+      description: 'Group the project graph into connected components over import and reference edges. Containment edges are excluded by default because they collapse the repository into one component.',
+      inputSchema: {
+        projectId,
+        limit: z.number().int().positive().max(50).optional(),
+        members: z.number().int().positive().max(100).optional(),
+        edgeTypes: memoryEdgeTypes
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, ...input }) => services.memory.communities(id, input))
+  );
+
+  server.registerTool(
+    'memory_path',
+    {
+      description: 'Find the shortest recorded edge path between two memory nodes, or report that none exists within the hop cap.',
+      inputSchema: {
+        projectId,
+        fromNodeId: z.string().trim().min(1).max(500),
+        toNodeId: z.string().trim().min(1).max(500),
+        maxHops: z.number().int().positive().max(6).optional(),
+        edgeTypes: memoryEdgeTypes
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, fromNodeId, toNodeId, maxHops, edgeTypes }) =>
+      services.memory.path(id, fromNodeId, toNodeId, { maxHops, edgeTypes })
+    )
+  );
+
+  server.registerTool(
+    'memory_query',
+    {
+      description: 'Answer a natural-language question from GATE Memory. Every statement cites a repository location and only recorded graph edges are used.',
+      inputSchema: {
+        projectId,
+        question: z.string().trim().min(1).max(2000),
+        budget: z.number().int().min(256).max(32_000).optional()
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    handler(({ projectId: id, ...input }) => services.memory.query(id, input))
   );
 
   server.registerTool(

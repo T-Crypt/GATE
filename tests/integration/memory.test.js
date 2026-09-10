@@ -228,3 +228,143 @@ test('memory neighborhoods can be restricted to deterministic relationship types
     repository.close();
   }
 });
+
+function graphFixture() {
+  const repository = createGitFixture();
+  fs.mkdirSync(path.join(repository.repoPath, 'core'), { recursive: true });
+  fs.mkdirSync(path.join(repository.repoPath, 'isolated'), { recursive: true });
+  fs.writeFileSync(path.join(repository.repoPath, 'core', 'kernel.js'), 'export function dispatch() {}\n');
+  for (const name of ['alpha', 'beta', 'gamma']) {
+    fs.writeFileSync(
+      path.join(repository.repoPath, 'core', `${name}.js`),
+      `import { dispatch } from './kernel.js';\nexport function ${name}() { return dispatch(); }\n`
+    );
+  }
+  fs.writeFileSync(path.join(repository.repoPath, 'isolated', 'leaf.js'), 'export function leaf() {}\n');
+  fs.writeFileSync(
+    path.join(repository.repoPath, 'isolated', 'branch.js'),
+    "import { leaf } from './leaf.js';\nexport function branch() { return leaf(); }\n"
+  );
+  repository.run(['add', '.']);
+  repository.run(['commit', '-m', 'add graph fixture']);
+  const { db, close } = createTestDatabase();
+  const events = new EventStore(db);
+  const projects = new ProjectService(db, events, new GitAdapter());
+  const memory = new MemoryService({ db, projects, gitAdapter: new GitAdapter(), eventStore: events });
+  const project = projects.create({ name: 'Graph fixture', repoPath: repository.repoPath }, context('create-graph'));
+  return { repository, db, memory, project, close() { close(); repository.close(); } };
+}
+
+test('god nodes rank the highest fan-in module by recorded import degree', async () => {
+  const fixture = graphFixture();
+  try {
+    await fixture.memory.refresh(fixture.project.id, { force: true }, context('graph-godnodes'));
+
+    const central = fixture.memory.godNodes(fixture.project.id, { edgeTypes: ['IMPORTS'] });
+
+    assert.deepEqual(central.edgeTypes, ['IMPORTS']);
+    assert.equal(central.truncated, false);
+    assert.equal(central.items[0].path, 'core/kernel.js');
+    assert.equal(central.items[0].inDegree, 3);
+    assert.equal(central.items[0].outDegree, 0);
+    assert.equal(central.items[0].sourceLocation, 'core/kernel.js');
+    assert.ok(central.items.every((node) => node.degree > 0));
+    assert.deepEqual(central.items.map((node) => node.degree), [...central.items.map((node) => node.degree)].sort((left, right) => right - left));
+  } finally { fixture.close(); }
+});
+
+test('communities separate modules that share no recorded import or reference edge', async () => {
+  const fixture = graphFixture();
+  try {
+    await fixture.memory.refresh(fixture.project.id, { force: true }, context('graph-communities'));
+
+    const grouped = fixture.memory.communities(fixture.project.id);
+
+    assert.deepEqual(grouped.edgeTypes, ['IMPORTS', 'REFERENCES']);
+    assert.equal(grouped.count, 2);
+    const paths = grouped.items.map((community) => new Set(community.members.map((node) => node.sourcePath || node.path)));
+    const core = paths.find((set) => set.has('core/kernel.js'));
+    const isolated = paths.find((set) => set.has('isolated/leaf.js'));
+    assert.ok(core && isolated);
+    assert.equal(core.has('isolated/leaf.js'), false);
+    assert.equal(isolated.has('core/kernel.js'), false);
+    assert.equal(grouped.items[0].size >= grouped.items[1].size, true);
+    assert.ok(grouped.items.every((community) => community.label.length > 0));
+  } finally { fixture.close(); }
+});
+
+test('memory path walks a recorded import chain and refuses to invent a missing link', async () => {
+  const fixture = graphFixture();
+  try {
+    await fixture.memory.refresh(fixture.project.id, { force: true }, context('graph-path'));
+    const alpha = fixture.memory.search(fixture.project.id, { query: 'core/alpha.js', type: 'file' }).items[0];
+    const kernel = fixture.memory.search(fixture.project.id, { query: 'core/kernel.js', type: 'file' }).items[0];
+    const leaf = fixture.memory.search(fixture.project.id, { query: 'isolated/leaf.js', type: 'file' }).items[0];
+
+    const found = fixture.memory.path(fixture.project.id, alpha.id, kernel.id, { edgeTypes: ['IMPORTS'] });
+
+    assert.equal(found.hops, 1);
+    assert.deepEqual(found.nodes.map((node) => node.path), ['core/alpha.js', 'core/kernel.js']);
+    assert.deepEqual(found.edges.map((edge) => edge.type), ['IMPORTS']);
+    assert.equal(found.edges[0].provenance.origin, 'static_parser');
+    assert.throws(
+      () => fixture.memory.path(fixture.project.id, alpha.id, leaf.id, { edgeTypes: ['IMPORTS', 'REFERENCES'] }),
+      (error) => error.code === 'MEMORY_PATH_NOT_FOUND' && error.status === 404
+    );
+    assert.throws(() => fixture.memory.path(fixture.project.id, alpha.id, 'memory:1:file:missing'), /was not found/);
+  } finally { fixture.close(); }
+});
+
+test('memory explain cites the recorded edges and provenance behind a node', async () => {
+  const fixture = graphFixture();
+  try {
+    await fixture.memory.refresh(fixture.project.id, { force: true }, context('graph-explain'));
+    const symbol = fixture.memory.search(fixture.project.id, { query: 'dispatch', type: 'symbol' }).items[0];
+
+    const explained = fixture.memory.explain(fixture.project.id, symbol.id, { query: 'dispatch' });
+    const neighborhood = fixture.memory.neighbors(fixture.project.id, symbol.id, { depth: 1 });
+    const recordedEdgeIds = new Set(neighborhood.edges.map((edge) => edge.id));
+
+    assert.equal(explained.matched, true);
+    assert.equal(explained.sourceLocation, 'core/kernel.js:1');
+    assert.equal(explained.provenance.origin, 'static_parser');
+    assert.ok(explained.matchReasons.length > 0);
+    assert.ok(explained.relationships.length > 0);
+    assert.ok(explained.relationships.every((relation) => recordedEdgeIds.has(relation.edgeId)));
+    assert.ok(explained.relationships.some((relation) => relation.type === 'CONTAINS' && relation.direction === 'incoming'));
+    assert.ok(explained.relationships.some((relation) => relation.type === 'REFERENCES'));
+    assert.match(explained.summary, /static source parsing/);
+    assert.throws(() => fixture.memory.explain(fixture.project.id, 'memory:1:symbol:missing'), /was not found/);
+  } finally { fixture.close(); }
+});
+
+test('memory query answers from indexed nodes only and cites every claim', async () => {
+  const fixture = graphFixture();
+  try {
+    await fixture.memory.refresh(fixture.project.id, { force: true }, context('graph-query'));
+
+    const answered = fixture.memory.query(fixture.project.id, { question: 'what depends on dispatch?', budget: 4000 });
+    const indexed = new Set(
+      fixture.db.prepare('SELECT id FROM memory_nodes WHERE project_id = ?').all(fixture.project.id).map((row) => row.id)
+    );
+
+    assert.ok(answered.citations.length > 0);
+    assert.ok(answered.citations.every((item) => indexed.has(item.nodeId)));
+    assert.ok(answered.citations.every((item) => item.sourceLocation));
+    assert.ok(answered.statements.every((statement) => statement.nodeIds.every((id) => indexed.has(id))));
+    assert.ok(answered.edges.every((edge) => indexed.has(edge.sourceNodeId) && indexed.has(edge.targetNodeId)));
+    assert.match(answered.answer, /dispatch/);
+    assert.match(answered.answer, /Structural impact is/);
+    assert.ok(answered.estimatedTokens <= answered.tokenBudget);
+
+    const trimmed = fixture.memory.query(fixture.project.id, { question: 'what depends on dispatch?', budget: 256 });
+    assert.equal(trimmed.truncated, true);
+    assert.ok(trimmed.citations.length < answered.citations.length);
+    assert.ok(trimmed.citations.every((item) => indexed.has(item.nodeId)));
+
+    const unknown = fixture.memory.query(fixture.project.id, { question: 'zzzznonexistentsymbol' });
+    assert.deepEqual(unknown.citations, []);
+    assert.match(unknown.answer, /no indexed node/i);
+    assert.throws(() => fixture.memory.query(fixture.project.id, { question: '  ' }), /question is required/);
+  } finally { fixture.close(); }
+});

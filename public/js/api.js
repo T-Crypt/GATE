@@ -53,6 +53,11 @@ export const api = {
     return request(`/projects/${projectId}/memory/nodes/${encodeURIComponent(nodeId)}/neighbors?${query}`);
   },
   getMemoryImpact: (projectId, query) => request(`/projects/${projectId}/memory/impact?${new URLSearchParams({ q: query })}`),
+  explainMemoryNode: (projectId, nodeId, query) => request(`/projects/${projectId}/memory/nodes/${encodeURIComponent(nodeId)}/explain?${new URLSearchParams(query ? { q: query } : {})}`),
+  getMemoryGodNodes: (projectId, input = {}) => request(`/projects/${projectId}/memory/god-nodes?${new URLSearchParams(input)}`),
+  getMemoryCommunities: (projectId, input = {}) => request(`/projects/${projectId}/memory/communities?${new URLSearchParams(input)}`),
+  getMemoryPath: (projectId, from, to) => request(`/projects/${projectId}/memory/path?${new URLSearchParams({ from, to })}`),
+  queryMemory: (projectId, question, budget) => request(`/projects/${projectId}/memory/query?${new URLSearchParams({ q: question, ...(budget ? { budget } : {}) })}`),
   compileMemoryContext: (projectId, input) => request(`/projects/${projectId}/memory/context`, { method: 'POST', body: input }),
   listMemoryContexts: (projectId, limit = 20) => request(`/projects/${projectId}/memory/context?${new URLSearchParams({ limit })}`),
   getMemoryContext: (projectId, capsuleId) => request(`/projects/${projectId}/memory/context/${encodeURIComponent(capsuleId)}`),

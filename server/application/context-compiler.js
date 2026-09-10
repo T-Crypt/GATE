@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { runIdempotent } from './idempotency.js';
+import { estimateTokens, trimToBudget } from './token-budget.js';
 import { AppError, notFound, validation } from '../domain/errors.js';
 
 const KINDS = new Set(['context', 'planning', 'execution']);
@@ -25,10 +26,6 @@ function decode(row) {
   };
 }
 
-function estimateTokens(value) {
-  return Math.ceil(JSON.stringify(value).length / 4);
-}
-
 function uniqueNodes(nodes) {
   return [...new Map(nodes.filter(Boolean).map((node) => [node.id, node])).values()];
 }
@@ -43,8 +40,8 @@ function readExcerpt(root, relativePath) {
   return content.slice(0, 2400);
 }
 
-function trimPayload(payload, tokenBudget) {
-  const textFields = () => [
+function textFields(payload) {
+  return [
     ...payload.files.map((item) => ({ item, key: 'excerpt' })),
     ...payload.tests.map((item) => ({ item, key: 'excerpt' })),
     ...payload.projectRules.flatMap((item) => [
@@ -52,29 +49,40 @@ function trimPayload(payload, tokenBudget) {
       { item, key: 'managedContent' }
     ])
   ].filter(({ item, key }) => item[key]?.length > 160);
+}
 
-  while (estimateTokens(payload) > tokenBudget) {
-    const fields = textFields().sort((left, right) => right.item[right.key].length - left.item[left.key].length);
-    if (fields.length) {
-      const { item, key } = fields[0];
-      item[key] = `${item[key].slice(0, Math.max(160, Math.floor(item[key].length * 0.65))).trimEnd()}…`;
-      continue;
+function trimPayload(payload, tokenBudget) {
+  return trimToBudget(
+    payload,
+    tokenBudget,
+    [
+      (value) => {
+        const fields = textFields(value).sort((left, right) => right.item[right.key].length - left.item[left.key].length);
+        if (!fields.length) return false;
+        const { item, key } = fields[0];
+        item[key] = `${item[key].slice(0, Math.max(160, Math.floor(item[key].length * 0.65))).trimEnd()}…`;
+        return true;
+      },
+      (value) => {
+        if (value.files.length <= 1) return false;
+        value.files.pop();
+        return true;
+      },
+      (value) => {
+        if (!value.tests.length) return false;
+        value.tests.pop();
+        return true;
+      },
+      (value) => {
+        if (value.symbols.length <= 1) return false;
+        value.symbols.pop();
+        return true;
+      }
+    ],
+    () => {
+      throw validation('tokenBudget is too small for the required project context', { field: 'tokenBudget' });
     }
-    if (payload.files.length > 1) {
-      payload.files.pop();
-      continue;
-    }
-    if (payload.tests.length) {
-      payload.tests.pop();
-      continue;
-    }
-    if (payload.symbols.length > 1) {
-      payload.symbols.pop();
-      continue;
-    }
-    throw validation('tokenBudget is too small for the required project context', { field: 'tokenBudget' });
-  }
-  return payload;
+  );
 }
 
 function contentHash(payload) {
