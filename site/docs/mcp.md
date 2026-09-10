@@ -103,6 +103,38 @@ Errors come back as `{ "error": { "code", "message" } }`, using the same codes a
 | `issue_update` | `projectId`, `issueId`, `status` (`open`, `in_progress`, or `closed`) | Change an issue's status. |
 | `note_create` | `projectId`, `body` (≤ 10,000 chars), optional `tags[]` (≤ 30 tags) | Record a local project note, optionally tagged. |
 
+### GATE Memory
+
+See [Project intelligence]({% link docs/project-intelligence.md %}) for what is indexed and how.
+
+| Tool | Input | Description |
+| --- | --- | --- |
+| `memory_status` | `projectId` | Compare the indexed revision with the current repository SHA and read graph/search counts. |
+| `memory_search` | `projectId`, `query`, optional `limit`, `type` | Combine exact structural matches with local FTS5 source retrieval and explain each match. |
+| `memory_neighbors` | `projectId`, `nodeId`, optional `depth`, `edgeTypes[]` | Traverse a bounded neighborhood through selected `CONTAINS`, `IMPORTS`, and `REFERENCES` edges. |
+| `memory_impact` | `projectId`, `query`, optional `limit` (≤ 25) | Return matching symbols/files, declaring files, transitive production dependents, tests, risk, and structural reasons. |
+| `memory_refresh` | `projectId`, optional `force`, `idempotencyKey` | Idempotently build or incrementally refresh the local index. |
+| `memory_context` | `projectId`, `goal`, optional `kind` (`context`, `planning`, or `execution`), `tokenBudget` (512–32,000), `idempotencyKey` | Idempotently compile and persist a token-budgeted context capsule. It requires current Memory, injects project instructions, and returns full commit, graph, file, and retrieval provenance. |
+
+`memory_refresh` and `memory_context` are mutations and require `idempotencyKey`. Memory tools operate only on the connected local repository. Context compilation does not send source or instruction content to a provider.
+
+### Feature planning
+
+Durable Feature workspaces and grounded planning requests are described in [Project intelligence]({% link docs/project-intelligence.md %}).
+
+| Tool | Input | Description |
+| --- | --- | --- |
+| `feature_list` | `projectId` | List durable feature workspaces for a project. |
+| `feature_get` | `projectId`, `featureId` | Read one durable feature workspace. |
+| `feature_create` | `projectId`, `title`, `intent`, `idempotencyKey` | Create a local feature workspace. |
+| `feature_update` | `projectId`, `featureId`, `status`, `idempotencyKey` | Advance a feature through its explicit lifecycle. |
+| `feature_plan` | `projectId`, `featureId`, optional `model`, `tokenBudget`, `idempotencyKey` | Compile current Memory context and propose a feature timeline. |
+| `issue_plan` | `projectId`, `issueId`, optional `model`, `tokenBudget`, `idempotencyKey` | Convert a local issue into the same grounded planning flow. |
+| `milestone_expand` | `projectId`, `milestoneId`, optional `model`, `tokenBudget`, `idempotencyKey` | Propose child steps for a milestone without altering the accepted timeline. |
+| `planning_get` | `projectId`, `planningRequestId` | Inspect a proposed or accepted planning request: impact, context provenance, and the proposed draft. |
+
+Feature planning mutations require `idempotencyKey`. MCP cannot accept a proposal — there is deliberately no accept tool; acceptance exists only through the localhost human-facing interface (`POST .../planning/:requestId/accept`), which the server keeps on a loopback bind by default.
+
 Every tool above takes `idempotencyKey` for mutations (read tools take none).
 
 ## What is deliberately absent

@@ -6,6 +6,10 @@ Gate is a localhost-first control plane for human-reviewed AI development. You d
 
 The name is literal. The core domain object is the gate: a checkpoint a step must clear (`code`, `test`, `build`, `plan`, `visual`, or `approval`) before the timeline lets it proceed. An agent can attach evidence to a gate. Only a human can decide it.
 
+Full documentation is published at **[t-crypt.github.io/GATE](https://t-crypt.github.io/GATE)**.
+
+![Gate — the workstation: a proposed timeline with mile markers and project intelligence](preview.png)
+
 ## What it does
 
 **Plans before it acts.** You give Gate a goal and repository context. A local provider returns a graph of milestones and steps with explicit dependencies and gates, not a wall of text. Nothing executes until you accept the draft. The Settings page picks the backend provider (Claude Code or OpenCode) per project; new projects default to Claude.
@@ -26,7 +30,7 @@ The name is literal. The core domain object is the gate: a checkpoint a step mus
 
 **Builds local project intelligence.** GATE Memory incrementally indexes repository files, JavaScript-family symbols, imports, references, and searchable source text into SQLite. Its Memory view supports hybrid search, focused graph traversal, and deterministic impact analysis. The Context Compiler turns those results and project instructions into token-budgeted planning or execution capsules with commit- and node-level provenance; stale indexes are rejected rather than silently used.
 
-**Keeps feature work grounded.** Durable Feature workspaces connect intent, structural impact, compiled context, and proposed timeline revisions. Local issues use the same planning path, while accepted milestones can be expanded progressively. Every generated plan stays proposed until it is accepted from the localhost interface.
+**Keeps feature work grounded.** Durable Feature workspaces connect intent, structural impact, compiled context, and proposed timeline revisions. Local issues use the same planning path, while milestones can be expanded progressively. Every generated plan stays proposed until it is accepted from the localhost interface.
 
 **Speaks MCP too.** The same application services run over stdio for any MCP client. Read tools cover projects, timelines, runs, reviews, activity, and GATE Memory; idempotent mutations can refresh Memory, compile context, draft or accept timelines, run steps, submit evidence, and maintain local issues and notes. There is deliberately no approval tool and no merge, push, or protected-branch mutation tool over MCP: an agent can report evidence, but it cannot approve its own gate.
 
@@ -53,8 +57,8 @@ Run `npm run dev` for development. `npm run check` is the full release gate (lin
 
 ## MCP
 
-Run `npm run mcp` from an MCP client. The server uses stdio and the same SQLite-backed services as the web UI. See [docs/mcp.md](docs/mcp.md).
+Run `npm run mcp` from an MCP client. The server uses stdio and the same SQLite-backed services as the web UI. See [MCP interface](https://t-crypt.github.io/GATE/docs/mcp/).
 
 ## Operations
 
-Copy `.env.example` values into your process environment as needed (`GATE_DATA_DIR`, `GATE_JSON_LIMIT`, `GATE_OUTPUT_LIMIT_BYTES`, `HOST`, `PORT`, `LOG_LEVEL`). Set `GATE_GITHUB_TOKEN` (or `GATE_GITHUB_API_URL` for a GitHub Enterprise host) to enable the read-only remote overview in the Git view. The default database is `data/tracker.db`; run worktrees live under `data/worktrees`. Backups go through `BackupService` and never overwrite an existing target. See [architecture](docs/architecture.md), [providers](docs/providers.md), and [troubleshooting](docs/troubleshooting.md).
+Copy `.env.example` values into your process environment as needed (`GATE_DATA_DIR`, `GATE_JSON_LIMIT`, `GATE_OUTPUT_LIMIT_BYTES`, `HOST`, `PORT`, `LOG_LEVEL`). Set `GATE_GITHUB_TOKEN` (or `GATE_GITHUB_API_URL` for a GitHub Enterprise host) to enable the read-only remote overview in the Git view. The default database is `data/tracker.db`; run worktrees live under `data/worktrees`. Backups go through `BackupService` and never overwrite an existing target. See [setup & operations](https://t-crypt.github.io/GATE/docs/setup/), [architecture](https://t-crypt.github.io/GATE/docs/architecture/), [project intelligence](https://t-crypt.github.io/GATE/docs/project-intelligence/), [providers](https://t-crypt.github.io/GATE/docs/providers/), and [troubleshooting](https://t-crypt.github.io/GATE/docs/troubleshooting/).

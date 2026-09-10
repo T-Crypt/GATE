@@ -25,11 +25,15 @@ A provider implements two methods:
 - `start(request, observer)` — run one timeline step; returns a cancellable session plus a completion promise
 - `draftTimeline({ goal, repositoryContext, cwd, model, env })` — propose a dependency-aware timeline for a goal
 
-Providers never own branch, timeline, gate, or approval policy — those live in the domain. Provider credentials stay in that provider's local environment; do not persist secrets in project configuration.
+Plus one optional hook used only for the model catalog:
+
+- `listModels()` — return the reachable models for the Settings page and save-time model validation (`GET /providers/:kind/models`). A provider without it gets no model dropdown; the project's `providerConfig.model` is still passed through verbatim.
+
+Provider output must satisfy the shared timeline contract (node kinds, edge and gate types, DAG acyclicity) that both adapters enforce against the same `normalizeTimelineGraph` rules — a draft that satisfies the schema survives normalization. Providers never own branch, timeline, gate, or approval policy — those live in the domain. Provider credentials stay in that provider's local environment; do not persist secrets in project configuration.
 
 ## Adding a provider
 
-A new adapter ships by implementing the two methods above against the same request and observer shapes the existing adapters use — no changes to the domain, the HTTP API, or the MCP tool surface are required. The [MCP interface]({% link docs/mcp.md %}) already works for any connected agent; what is provider-specific today is only which executable Gate schedules when a step starts.
+A new adapter ships by implementing the methods above against the same request and observer shapes the existing adapters use (`listModels` is optional); no changes to the domain, the HTTP API, or the MCP tool surface are required. The [MCP interface]({% link docs/mcp.md %}) already works for any connected agent; what is provider-specific today is only which executable Gate schedules when a step starts.
 
 ## Choosing a provider
 

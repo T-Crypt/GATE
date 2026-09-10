@@ -46,17 +46,20 @@ All configuration is via environment variables (see `.env.example`):
 | `GATE_JSON_LIMIT` | `1mb` | Maximum JSON body size for the HTTP API. |
 | `GATE_OUTPUT_LIMIT_BYTES` | `2000000` | Cap on captured provider output. |
 | `LOG_LEVEL` | `info` | Log verbosity. |
-| `ALLOW_REMOTE_BIND` | `false` | Permit binding to a non-loopback host. |
 | `GATE_GITHUB_TOKEN` | *(unset)* | GitHub token enabling the read-only remote overview (open PRs and issues) in the Git view. Gate only reads; it never creates, merges, or pushes. |
 | `GATE_GITHUB_API_URL` | `https://api.github.com` | GitHub REST API base URL; override for GitHub Enterprise. |
+| `ALLOW_REMOTE_BIND` | `false` | Permit binding to a non-loopback host. Requires a non-loopback `HOST`. |
+| `OPENCODE_BIN_PATH` | *(unset)* | Windows-only override for the native OpenCode executable (see [Provider adapters]({% link docs/providers.md %})). |
 
 > Tokens are read from the environment, never from project configuration or the database. Gate holds no credentials itself.
+
+> `ALLOW_REMOTE_BIND` is the acceptance-boundary escape hatch: with it unset (the default) the server refuses to bind to anything but a loopback address, which is what keeps plan acceptance and gate decisions on the localhost human-facing interface. Setting it `true` exposes the HTTP surface to the network — only do that on a trusted host.
 
 ## Data layout
 
 Under `GATE_DATA_DIR` (default `data/`):
 
-- `tracker.db` — the SQLite database; the source of truth.
+- `tracker.db` — the SQLite database; the source of truth. Timeline, events, Memory graph and full-text index, context capsules, and feature/planning records all live in this one file.
 - `worktrees/` — linked worktrees, one per run, on branches named `<project-prefix><run-id>` (`work/gate-<run-id>` by default; the prefix is set per project at connect time or from Settings).
 - `tests/<project-id>/` — validation artifacts; always local.
 

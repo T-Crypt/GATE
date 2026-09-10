@@ -38,11 +38,15 @@ When `GATE_GITHUB_TOKEN` is set, `RemoteService` (`server/application/remote-ser
 
 ## Repository mirror (`.gate/`)
 
-`RepoMirrorService` writes a read-only projection of SQLite — `project.json`, `timeline.json`, `issues.json`, `notes.json`, plus rendered `MILESTONES.md` and `ISSUES.md` — into `<repo>/.gate/` on every relevant event (`project.*`, `timeline.*`, `issue.*`, `note.*`). The first time Gate connects a project it appends a `.gate/` entry to the project's `.gitignore`, so the mirror stays out of commits by default. Remove the ignore entry if you want the mirror to travel with the repo. Nothing reads `.gate/` back — it is an export, not a second copy of state, and a failed mirror write never breaks the command that triggered it.
+`RepoMirrorService` writes a read-only projection of SQLite — `project.json`, `timeline.json`, `issues.json`, `notes.json`, `features.json`, plus rendered `MILESTONES.md` and `ISSUES.md` — into `<repo>/.gate/` on every relevant event (`project.*`, `timeline.*`, `issue.*`, `note.*`, `feature.*`, `planning.*`, `milestone.*`). `features.json` embeds each feature's planning-request linkage. The first time Gate connects a project it appends a `.gate/` entry to the project's `.gitignore`, so the mirror stays out of commits by default. Remove the ignore entry if you want the mirror to travel with the repo. Nothing reads `.gate/` back — it is an export, not a second copy of state, and a failed mirror write never breaks the command that triggered it.
+
+## Project intelligence
+
+Above the timeline, Gate keeps a local project-intelligence layer in the same SQLite database: GATE Memory indexes the repository's file graph, JavaScript-family symbols/imports, and searchable text; the Context Compiler turns a current Memory revision and managed project instructions into token-budgeted context capsules; and Feature workspaces ground planning in those results with deterministic impact previews and proposed-before-accepted timeline drafts. It is fully local and derives only repository facts — no model guesses are persisted as graph edges. See [Project intelligence]({% link docs/project-intelligence.md %}).
 
 ## Drafting context (`project_digests`)
 
-`project_digests` holds one row per project: a depth-capped file tree and the current milestone titles, refreshed whenever the project's Git history is synced. `timeline_draft` sends this instead of raw repository content, so drafting a new timeline starts the provider with cheap orientation rather than an unscoped exploration or a full-codebase paste.
+`project_digests` holds one row per project: a depth-capped file tree and the current milestone titles, refreshed whenever the project's Git history is synced. Free-form `timeline_draft` sends this instead of raw repository content, so drafting a new timeline starts the provider with cheap orientation rather than an unscoped exploration or a full-codebase paste. Feature, issue, and milestone planning instead compile token-budgeted context capsules and send those to the provider (see [Project intelligence]({% link docs/project-intelligence.md %})).
 
 ## One answer for activity
 
