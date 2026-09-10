@@ -1,6 +1,6 @@
 # Project intelligence implementation status
 
-This document records the implementation boundary at the end of Phase 5. `AGENTS.md` remains the architecture specification; this is the concise description of what the application currently ships.
+This document records the implementation boundary at the end of Phase 5. `AGENTS.md` remains the architecture specification; this is the concise description of what the application currently ships. User-facing reference for the shipped behavior lives on the docs site ([Project intelligence](https://t-crypt.github.io/GATE/docs/project-intelligence/)).
 
 ## Complete vertical slices
 

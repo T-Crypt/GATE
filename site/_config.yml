@@ -20,6 +20,8 @@ nav_docs:
     url: /docs/setup/
   - title: Architecture
     url: /docs/architecture/
+  - title: Project intelligence
+    url: /docs/project-intelligence/
   - title: Provider adapters
     url: /docs/providers/
   - title: MCP interface

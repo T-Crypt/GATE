@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Phase 5 adds durable feature planning above timeline steps. A feature keeps its intent, lifecycle, Memory-grounded impact, planning context, proposed timeline, and accepted work associations together. Existing issues can enter the same pipeline, and accepted milestones can be expanded progressively without bypassing timeline review.
+Phase 5 adds durable feature planning above timeline steps. A feature keeps its intent, lifecycle, Memory-grounded impact, planning context, proposed timeline, and accepted work associations together. Existing issues can enter the same pipeline, and milestones can be expanded progressively without bypassing timeline review.
 
 ## Scope
 
@@ -13,7 +13,7 @@ This phase delivers:
 - Memory-grounded impact previews and planning context capsules;
 - provider-generated timeline drafts that remain proposed until explicitly accepted;
 - links from planning sources to accepted milestones, runs, evidence, and reviews;
-- progressive expansion of one accepted milestone into proposed child steps;
+- progressive expansion of a milestone into proposed child steps;
 - a `Plan Issue` action for local GATE issues;
 - HTTP, MCP, WebUI, event, mirror, and targeted test coverage.
 
@@ -91,7 +91,7 @@ The UI renders this before the user accepts the draft. The preview is evidence o
 
 ## Progressive milestone expansion
 
-An accepted milestone can request expansion. GATE compiles current context for that milestone and asks the provider for one milestone's child steps. The response must contain at least one step and may not modify existing nodes. GATE remaps generated identifiers, parents every new step to the selected milestone, preserves generated step dependencies and gates, and constructs a proposed full-timeline revision by combining them with the current graph.
+A milestone can request expansion. GATE compiles current context for that milestone and asks the provider for one milestone's child steps. The response must contain at least one step and may not modify existing nodes. GATE remaps generated identifiers, parents every new step to the selected milestone, preserves generated step dependencies and gates, and constructs a proposed full-timeline revision by combining them with the current graph.
 
 The existing timeline remains unchanged until that revision is accepted. Locked, running, review, and approved nodes retain the existing protection enforced by `TimelineService.replaceDraft()`.
 
@@ -113,7 +113,7 @@ The sidebar gains `Features`. The workspace provides:
 - proposed timeline summary and explicit acceptance;
 - accepted milestones plus related runs, evidence, and review state.
 
-The Issues view gains `Plan Issue`. The Timeline view gains `Expand milestone` only for accepted, non-terminal milestones. Both actions open the same proposed-plan review representation used by Features.
+The Issues view gains `Plan Issue`. The Timeline view adds `Expand milestone` on milestone lanes; the service requires the node to be a milestone, remaps generated child steps, and any proposed revision preserves locked and active nodes on acceptance. Both actions open the same proposed-plan review representation used by Features.
 
 ## Events and mirror
 

@@ -21,7 +21,9 @@ description: Gate — a localhost-first control plane for human-reviewed AI deve
 - **Ties evidence to a commit.** Evidence submitted against a gate is bound to a specific commit SHA and file scope. If the branch moves or a file in that scope changes afterward, the evidence goes stale and can no longer satisfy the gate. Approval gates require a decision from a human actor; Gate rejects an agent that tries to approve its own work.
 - **Records every command as an event.** Each command appends an ordered, immutable event and updates its read model in one transaction. That event stream also drives the live UI over WebSocket. A client that drops and reconnects gets replayed exactly the events it missed — no gaps or duplicates.
 - **Shows you the whole plan at once.** The timeline view renders a mile-marker rail across the top: one colored badge per milestone connected by a track, showing which milestones are gating which. Each milestone's lane carries the same color as its marker, so overview and detail stay visually tied.
-- **Keeps a copy in your repo.** Gate mirrors each project's timeline, issues, and notes into `<repo>/.gate/` as plain JSON and Markdown, refreshed on every change. The mirror is ignored by default — Gate appends a `.gate/` entry to the project's `.gitignore` on first connect — but remove that entry and the data travels with the repo.
+- **Keeps a copy in your repo.** Gate mirrors each project's timeline, issues, notes, and features into `<repo>/.gate/` as plain JSON and Markdown, refreshed on every change. The mirror is ignored by default — Gate appends a `.gate/` entry to the project's `.gitignore` on first connect — but remove that entry and the data travels with the repo.
+- **Builds local project intelligence.** GATE Memory incrementally indexes repository files, JavaScript-family symbols, imports, references, and searchable source text into SQLite. Its Memory view supports hybrid search, focused graph traversal, and deterministic impact analysis. The Context Compiler turns those results and project instructions into token-budgeted planning or execution capsules with commit- and node-level provenance; stale indexes are rejected rather than silently used.
+- **Keeps feature work grounded.** Durable Feature workspaces connect intent, structural impact, compiled context, and proposed timeline revisions. Local issues use the same planning path, while milestones can be expanded progressively. Every generated plan stays proposed until it is accepted from the localhost interface.
 - **Speaks MCP too.** The same application services run over stdio for any MCP client. An agent can report evidence, but it cannot approve its own gate — there is deliberately no approval tool over MCP.
 
 ## Safety contract
@@ -47,6 +49,7 @@ Open `http://127.0.0.1:4177`, connect an existing Git repository, describe a goa
 
 - [Setup & Operations]({{ site.baseurl }}/docs/setup/) — requirements, npm scripts, environment variables, data layout, backups
 - [Architecture]({{ site.baseurl }}/docs/architecture/) — process layout, domain/adapter boundary, execution flow
+- [Project intelligence]({{ site.baseurl }}/docs/project-intelligence/) — GATE Memory, the Context Compiler, and feature planning
 - [Provider adapters]({{ site.baseurl }}/docs/providers/) — the Claude and OpenCode adapters and the provider contract
 - [MCP interface]({{ site.baseurl }}/docs/mcp/) — tools, idempotency keys, and what is deliberately absent
 - [Event log]({{ site.baseurl }}/docs/events/) — append-only events, replay, and event families
