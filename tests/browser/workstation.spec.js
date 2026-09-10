@@ -326,3 +326,134 @@ test('a failed draft explains itself instead of silently resetting', async ({ pa
   await expect(page.locator('.draft-error')).toContainText('Claude timeline drafting failed');
   await expect(draftButton).toBeEnabled();
 });
+
+test('a run started against a drifted plan keeps its warning on screen', async ({ page, request }) => {
+  const project = await createProject(request, 'browser-stale-plan', 'Drifted plan fixture');
+  await request.put(`/api/v1/projects/${project.id}/timeline`, {
+    headers: { 'Idempotency-Key': 'browser-stale-plan-timeline' },
+    data: {
+      nodes: [
+        { id: 'drift-milestone', key: 'D', kind: 'milestone', title: 'Drifted work' },
+        { id: 'drift-step', key: 'D-1', kind: 'step', parentId: 'drift-milestone', title: 'Change cancellation' }
+      ],
+      edges: [],
+      gates: []
+    }
+  });
+  // The service already computes planWarnings; the defect was purely that the
+  // page threw the response away. Stub the start so the assertion is about
+  // what the UI renders, not about provider timing.
+  await page.route(`**/api/v1/projects/${project.id}/runs`, async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          id: 'stub-run', projectId: project.id, nodeId: 'drift-step', status: 'running',
+          planWarnings: [{
+            projectId: project.id,
+            planningRequestId: '11111111-1111-4111-8111-111111111111',
+            status: 'STALE',
+            reason: '1 file this plan was grounded on changed: src/provider.js.',
+            changedGroundingFiles: ['src/provider.js']
+          }]
+        },
+        meta: { apiVersion: 'v1' }
+      })
+    });
+  });
+
+  await page.goto('/#/timeline');
+  await page.getByLabel('Active project').selectOption(String(project.id));
+  await page.getByRole('button', { name: 'Run D-1' }).click();
+
+  const warning = page.getByTestId('plan-warnings');
+  await expect(warning).toBeVisible();
+  await expect(warning).toContainText('STALE');
+  await expect(warning).toContainText('src/provider.js');
+  await expect(warning.getByRole('button', { name: 'Re-ground milestone' })).toBeVisible();
+
+  // A toast would already be gone; the warning must survive the re-render the
+  // live event stream triggers, and a trip through another view.
+  await page.getByRole('link', { name: 'Overview' }).click();
+  await page.getByRole('link', { name: 'Timeline' }).click();
+  await expect(page.getByTestId('plan-warnings')).toContainText('STALE');
+
+  await page.getByTestId('plan-warnings').getByRole('button', { name: 'Dismiss' }).click();
+  await expect(page.getByTestId('plan-warnings')).toHaveCount(0);
+});
+
+test('the planning inbox lists what needs a decision and dismissing clears it', async ({ page, request }) => {
+  const project = await createProject(request, 'browser-inbox', 'Inbox fixture');
+  const item = {
+    key: 'plan_stale:11111111-1111-4111-8111-111111111111',
+    kind: 'plan_stale',
+    title: 'Accepted feature plan has drifted',
+    detail: '1 file this plan was grounded on changed: src/provider.js.',
+    subject: 'Change provider cancellation',
+    route: 'features',
+    planningRequestId: '11111111-1111-4111-8111-111111111111',
+    staleness: { status: 'STALE', changedGroundingFiles: ['src/provider.js'] },
+    actions: ['analyze', 'reground', 'convert', 'dismiss']
+  };
+  let dismissed = false;
+  await page.route(`**/api/v1/projects/${project.id}/inbox`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          projectId: project.id,
+          items: dismissed ? [] : [item],
+          counts: dismissed ? {} : { plan_stale: 1 },
+          stalenessTruncated: false,
+          stalenessCheckLimit: 25
+        },
+        meta: { apiVersion: 'v1' }
+      })
+    });
+  });
+  await page.route(`**/api/v1/projects/${project.id}/inbox/*/dismiss`, async (route) => {
+    dismissed = true;
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { projectId: project.id, itemKey: item.key }, meta: { apiVersion: 'v1' } })
+    });
+  });
+
+  await page.goto('/#/inbox');
+  await page.getByLabel('Active project').selectOption(String(project.id));
+  const row = page.locator(`[data-inbox-item="${item.key}"]`);
+  await expect(row).toContainText('Accepted feature plan has drifted');
+  await expect(row.locator('.badge.staleness.stale')).toBeVisible();
+  await expect(row.getByRole('button', { name: 'Re-ground plan' })).toBeVisible();
+  await expect(row.getByRole('button', { name: 'Convert to issue' })).toBeVisible();
+
+  await row.getByRole('button', { name: 'Dismiss' }).click();
+  await expect(page.locator(`[data-inbox-item="${item.key}"]`)).toHaveCount(0);
+  await expect(page.getByText('Nothing is waiting on you')).toBeVisible();
+});
+
+test('memory leads with Ask and keeps the graph tools behind one disclosure', async ({ page, request }) => {
+  await ensureProject(request);
+  await page.goto('/#/memory');
+
+  // Ask is the primary entry point, so it is the first panel on the page.
+  const panels = page.locator('.memory-grid > *');
+  await expect(panels.first()).toContainText('Ask memory');
+  await expect(page.getByRole('heading', { name: 'Ask memory' })).toBeVisible();
+
+  // Exploration tools open on intent; the page does not lead with them.
+  const overviewButton = page.getByRole('button', { name: 'Load overview' });
+  await expect(overviewButton).toBeHidden();
+  await page.locator('.memory-exploration > summary').click();
+  await expect(overviewButton).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Path', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Neighborhood' })).toBeVisible();
+
+  // The overview is a whole-graph analysis, so its cost is stated up front.
+  await expect(overviewButton.locator('xpath=..')).toContainText(/\d+ nodes/);
+  await expect(page.locator('#memoryOverviewResults')).toContainText('up to 5,000 nodes');
+});

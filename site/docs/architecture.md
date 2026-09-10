@@ -42,7 +42,7 @@ When `GATE_GITHUB_TOKEN` is set, `RemoteService` (`server/application/remote-ser
 
 ## Project intelligence
 
-Above the timeline, Gate keeps a local project-intelligence layer in the same SQLite database: GATE Memory indexes the repository's file graph, JavaScript-family symbols/imports, and searchable text; the Context Compiler turns a current Memory revision and managed project instructions into token-budgeted context capsules; and Feature workspaces ground planning in those results with deterministic impact previews and proposed-before-accepted timeline drafts. It is fully local and derives only repository facts — no model guesses are persisted as graph edges. See [Project intelligence]({% link docs/project-intelligence.md %}).
+Above the timeline, Gate keeps a local project-intelligence layer in the same SQLite database: GATE Memory indexes the repository's file graph, JavaScript-family symbols/imports, and searchable text and answers structural questions from those recorded edges; the Context Compiler turns a current Memory revision and managed project instructions into token-budgeted context capsules; and Feature workspaces ground planning in those results with deterministic impact previews and proposed-before-accepted timeline drafts. Plan staleness is computed live from a plan's stored provenance against current `HEAD`, and the Planning inbox derives what needs a human decision from those same records rather than storing a second copy. It is fully local and derives only repository facts — no model guesses are persisted as graph edges. See [Project intelligence]({% link docs/project-intelligence.md %}).
 
 ## Drafting context (`project_digests`)
 

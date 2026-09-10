@@ -72,6 +72,8 @@ export const api = {
   getPlanningStaleness: (projectId, requestId) => request(`/projects/${projectId}/planning/${encodeURIComponent(requestId)}/staleness`),
   regroundPlanningRequest: (projectId, requestId, input = {}) => request(`/projects/${projectId}/planning/${encodeURIComponent(requestId)}/reground`, { method: 'POST', body: input }),
   acceptPlanningRequest: (projectId, requestId) => request(`/projects/${projectId}/planning/${encodeURIComponent(requestId)}/accept`, { method: 'POST', body: {} }),
+  getInbox: (projectId) => request(`/projects/${projectId}/inbox`),
+  dismissInboxItem: (projectId, itemKey) => request(`/projects/${projectId}/inbox/${encodeURIComponent(itemKey)}/dismiss`, { method: 'POST', body: {} }),
   getTimeline: (projectId) => request(`/projects/${projectId}/timeline`),
   replaceTimeline: (projectId, graph) => request(`/projects/${projectId}/timeline`, { method: 'PUT', body: graph }),
   draftTimeline: (projectId, goal, model) => request(`/projects/${projectId}/timeline/drafts`, { method: 'POST', body: { goal, ...(model ? { model } : {}) } }),

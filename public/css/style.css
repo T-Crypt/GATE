@@ -359,6 +359,38 @@ input::placeholder,textarea::placeholder { color: var(--faint); }
 .feature-plan { margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); }
 .feature-impact-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin: 12px 0; }
 .feature-impact-list { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 10px; }
+/* Memory leads with Ask; the graph tools sit behind one disclosure so the page
+   opens short and expands on intent. */
+.memory-primary { border-color: rgba(100,216,255,.22); }
+.memory-exploration { grid-column: 1 / -1; }
+.memory-exploration > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; color: var(--text-soft); cursor: pointer; }
+.memory-exploration > summary > span:first-child { display: grid; gap: 3px; }
+.memory-exploration > summary strong { font-size: 13px; }
+.memory-exploration[open] > summary { border-bottom: 1px solid var(--line); }
+.memory-exploration-body { display: grid; gap: 14px; padding: 18px; }
+.memory-tool { border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); }
+.memory-tool .panel-header { padding: 12px 14px; }
+.memory-tool .panel-body { padding: 14px; }
+.memory-truncated { color: var(--amber); }
+.inbox-list { display: grid; gap: 8px; }
+.inbox-item { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); }
+.inbox-item[data-kind="plan_stale"] { border-color: rgba(255,126,145,.26); }
+.inbox-item[data-kind="run_failed"] { border-color: rgba(247,199,106,.26); }
+.inbox-item-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.inbox-item-head strong { font-size: 12px; }
+.inbox-detail { margin: 0; color: var(--text-soft); font-size: 11px; }
+.inbox-subject { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-actions { margin-top: 2px; align-items: center; }
+.inbox-counts { display: flex; flex-wrap: wrap; gap: 6px; }
+.inbox-result:empty { display: none; }
+/* Plan staleness reuses the semantic status palette gates and runs already use:
+   green current, amber unverified, red drifted. */
+.badge.staleness.current { border-color: rgba(111,231,173,.32); background: var(--green-soft); color: var(--green); }
+.badge.staleness.possibly_stale { border-color: rgba(247,199,106,.32); background: var(--amber-soft); color: var(--amber); }
+.badge.staleness.stale { border-color: rgba(255,126,145,.32); background: var(--red-soft); color: var(--red); }
+.plan-warning { margin-bottom: 14px; border-color: rgba(247,199,106,.3); }
+.plan-warning-item { display: grid; gap: 8px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.plan-warning-item:last-of-type { border-bottom: 0; }
 .milestone-actions { display: grid; justify-items: end; gap: 6px; }
 .milestone-expansion { grid-column: 1 / -1; }
 .review-card[data-state="stale"] { border-color: rgba(247,199,106,.3); }

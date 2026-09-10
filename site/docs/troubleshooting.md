@@ -76,6 +76,8 @@ Error codes, interrupted runs, and the recovery procedure for the local database
 | `EXPANSION_CONFLICT` | A generated expansion step collided with an existing timeline node. The expansion was rejected and the timeline is untouched. |
 | `INVALID_FEATURE_TRANSITION` | The requested feature status change is not allowed by the declared lifecycle. |
 
+Plan staleness is advisory, not an error: a `STALE` or `POSSIBLY_STALE` result reports that the repository moved past the plan's grounding, and a step started against a drifted plan warns rather than failing. A repository that cannot answer the comparison (an unreachable grounding commit) reports `POSSIBLY_STALE` instead of raising. Re-grounding proposes a new plan and can therefore return `PLANNING_ALREADY_PROPOSED` if the same source already has one waiting.
+
 ### Remote observation
 
 | Code | Meaning and fix |

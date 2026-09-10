@@ -3,6 +3,7 @@ import { appendLiveActivity, initAgent, renderActivityRail } from './agent.js';
 import { initActivity } from './activity.js';
 import { emptyState, escapeHtml, openDialog, showToast } from './components.js';
 import { initGit } from './git.js';
+import { initInbox } from './inbox.js';
 import { initFeatures } from './features.js';
 import { initIssues } from './issues.js';
 import { initMemory } from './memory.js';
@@ -22,6 +23,7 @@ let reconnectTimer = null;
 
 const routes = [
   ['overview', 'OV', 'Overview'],
+  ['inbox', 'IN', 'Inbox'],
   ['timeline', 'TL', 'Timeline'],
   ['features', 'FT', 'Features'],
   ['memory', 'MM', 'Memory'],
@@ -32,6 +34,14 @@ const routes = [
   ['reviews', 'RV', 'Reviews'],
   ['settings', 'ST', 'Settings']
 ];
+
+// Routes that carry a count in the sidebar. Both answer the same question —
+// how much is waiting on the human — so they share one renderer and one
+// refresh rather than a per-route special case.
+const COUNTED_ROUTES = {
+  inbox: async (project) => (await api.getInbox(project.id)).items.length,
+  reviews: async (project) => (await api.getReview(project.id)).gates.filter((gate) => gate.status !== 'passed' && gate.status !== 'approved').length
+};
 
 function activeProject(state = getState()) {
   return state.projects.find((project) => project.id === state.projectId) || state.projects[0] || null;
@@ -62,7 +72,7 @@ function renderShell() {
       </header>
       <aside class="sidebar" id="sidebar">
         <p class="nav-label">Workspace</p>
-        <nav aria-label="Workspace"><ul class="nav-list">${routes.map(([route, icon, label]) => `<li><a class="nav-link ${state.route === route ? 'active' : ''}" href="#/${route}"><span class="nav-icon" aria-hidden="true">${icon}</span><span>${label}</span>${route === 'reviews' ? '<span class="nav-count">0</span>' : ''}</a></li>`).join('')}</ul></nav>
+        <nav aria-label="Workspace"><ul class="nav-list">${routes.map(([route, icon, label]) => `<li><a class="nav-link ${state.route === route ? 'active' : ''}" href="#/${route}"><span class="nav-icon" aria-hidden="true">${icon}</span><span>${label}</span>${COUNTED_ROUTES[route] ? `<span class="nav-count" data-nav-count="${route}">0</span>` : ''}</a></li>`).join('')}</ul></nav>
         <div class="sidebar-footer"><strong>Human review required</strong><p>Protected branches cannot be changed or integrated by automatic runs.</p></div>
       </aside>
       <main class="workspace-main" id="workspace"></main>
@@ -71,6 +81,22 @@ function renderShell() {
   bindShell();
   renderView();
   refreshActivity();
+  refreshNavCounts();
+}
+
+// A count that cannot be computed stays at its last value rather than
+// reporting zero: "nothing waiting" is a claim, not a fallback.
+async function refreshNavCounts() {
+  const project = activeProject();
+  if (!project) return;
+  for (const [route, count] of Object.entries(COUNTED_ROUTES)) {
+    void count(project)
+      .then((value) => {
+        const badge = document.querySelector(`[data-nav-count="${route}"]`);
+        if (badge) badge.textContent = String(value);
+      })
+      .catch(() => undefined);
+  }
 }
 
 function bindShell() {
@@ -102,6 +128,7 @@ function renderView() {
     overview: ['Project signal', 'Project overview', 'Execution, review, and repository health at a glance.'],
     timeline: ['Guided execution', 'Interactive timeline', 'Milestones, dependencies, code gates, visual gates, and approvals.'],
     features: ['Project planning', 'Features', 'Durable intent, grounded impact, proposed plans, and accepted work.'],
+    inbox: ['Needs a human decision', 'Planning inbox', 'Drifted plans, proposals awaiting acceptance, and failed runs with no follow-up.'],
     memory: ['Project intelligence', 'Memory', 'Local file graph, repository revision, and deterministic impact previews.'],
     agent: [providerName(activeProject(state).providerKind), 'Agent control', 'Observe current intent, streamed output, and bounded execution.'],
     activity: ['Run history', 'Activity', 'Every timeline-driven run against this project, with status and output.'],
@@ -133,6 +160,8 @@ function renderView() {
     } });
   } else if (state.route === 'overview') {
     void initOverview(content, { project, api });
+  } else if (state.route === 'inbox') {
+    void initInbox(content, { project, api, onChanged: async () => refreshNavCounts() });
   } else if (state.route === 'issues') {
     void initIssues(content, { project, api });
   } else if (state.route === 'git') {

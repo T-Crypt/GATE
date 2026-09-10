@@ -416,6 +416,12 @@ export function registerTools(server, services) {
   server.registerTool('planning_reground', {
     description: 'Propose a fresh Memory-grounded plan for the same source and link it to the plan it supersedes. The original plan is never modified or discarded.', inputSchema: { projectId, planningRequestId: z.string().uuid(), model: z.string().trim().max(200).optional(), tokenBudget: z.number().int().min(512).max(32_000).optional(), idempotencyKey }, annotations: { idempotentHint: true, openWorldHint: false }
   }, handler(({ projectId: id, planningRequestId, idempotencyKey: key, ...input }) => services.planner.reground(id, planningRequestId, input, actorContext(key))));
+  server.registerTool('inbox_list', {
+    description: 'List everything in this project waiting on a human decision: accepted plans the repository has drifted past, proposed plans awaiting acceptance, and failed runs with no follow-up issue. Items are derived from current records, never stored separately.', inputSchema: { projectId }, annotations: { readOnlyHint: true, openWorldHint: false }
+  }, handler(({ projectId: id }) => services.inbox.list(id)));
+  server.registerTool('inbox_dismiss', {
+    description: 'Mark one derived inbox item as needing no action. The planning request or run it was derived from is never modified.', inputSchema: { projectId, itemKey: z.string().trim().min(1).max(250), idempotencyKey }, annotations: { idempotentHint: true, openWorldHint: false }
+  }, handler(({ projectId: id, itemKey, idempotencyKey: key }) => services.inbox.dismiss(id, itemKey, actorContext(key))));
   server.registerTool('planning_get', {
     description: 'Read a proposed or accepted planning request with impact and provenance.', inputSchema: { projectId, planningRequestId: z.string().uuid() }, annotations: { readOnlyHint: true, openWorldHint: false }
   }, handler(({ projectId: id, planningRequestId }) => services.planner.get(id, planningRequestId)));

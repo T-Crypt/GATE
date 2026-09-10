@@ -7,6 +7,7 @@ import { ContextCompiler } from './application/context-compiler.js';
 import { EventStore } from './application/event-store.js';
 import { ExecutionService } from './application/execution-service.js';
 import { FeatureService } from './application/feature-service.js';
+import { InboxService } from './application/inbox-service.js';
 import { InstructionService } from './application/instruction-service.js';
 import { MemoryService } from './application/memory-service.js';
 import { ProjectService } from './application/project-service.js';
@@ -60,6 +61,7 @@ export function buildServices({ db, config, providers }) {
   const features = new FeatureService(db, events, projects);
   const planner = new PlannerService({ db, events, projects, features, memory, contexts, execution, timeline, gitAdapter });
   execution.attachPlanner(planner);
+  const inbox = new InboxService({ db, events, projects, planner });
   return {
     db,
     events,
@@ -69,6 +71,7 @@ export function buildServices({ db, config, providers }) {
     contexts,
     features,
     planner,
+    inbox,
     timeline,
     execution,
     reviews: new ReviewService(db, events),

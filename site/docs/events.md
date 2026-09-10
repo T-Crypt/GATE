@@ -37,8 +37,10 @@ The UI subscribes over WebSocket at `/ws?projectId=<id>&after=<sequence>`. On co
 | `agent.run.*` | `agent.run.started`, `agent.run.interrupted`, `agent.run.review`, `agent.run.failed`, `agent.run.cancelled` |
 | `gate.*` | `gate.evidence.submitted`, `gate.approval.decided` |
 | `feature.*` | `feature.created`, `feature.status.updated` |
-| `planning.*` | `planning.proposed`, `planning.accepted` |
+| `planning.*` | `planning.proposed`, `planning.accepted`, `planning.regrounded` |
 | `milestone.*` | `milestone.expansion.proposed` |
+| `plan.*` | `plan.staleness.warned` |
+| `inbox.*` | `inbox.dismissed` |
 | `memory.*` | `memory.index.started`, `memory.index.completed`, `memory.index.failed` |
 | `context.*` | `context.compiled` |
 | `remote.*` | `remote.prs.observed`, `remote.issues.observed` |

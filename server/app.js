@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { dashboardRouter } from './http/dashboard.js';
 import { executionsRouter } from './http/executions.js';
 import { featuresRouter } from './http/features.js';
+import { inboxRouter } from './http/inbox.js';
 import {
   data,
   errorHandler,
@@ -62,6 +63,7 @@ export function createApp({ services, config, logger, routes = true }) {
     app.use('/api/v1', projectsRouter(services.projects, services.instructions, services.providers));
     if (services.memory) app.use('/api/v1', memoryRouter(services.memory, services.contexts));
     if (services.features && services.planner) app.use('/api/v1', featuresRouter(services.features, services.planner));
+    if (services.inbox) app.use('/api/v1', inboxRouter(services.inbox));
     app.use('/api/v1', timelineRouter(services.timeline, services.execution));
     app.use('/api/v1', executionsRouter(services.execution));
     app.use('/api/v1', reviewsRouter(services.reviews));
