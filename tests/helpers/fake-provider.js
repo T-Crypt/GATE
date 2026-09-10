@@ -9,7 +9,7 @@ export class FakeProvider {
   }
 
   capabilities() {
-    return { streaming: true, resume: false, structuredDrafts: true };
+    return { streaming: true, structuredDrafts: true };
   }
 
   async start(request, observer) {

@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { GitAdapter } from '../../server/adapters/git.js';
+import { AppError } from '../../server/domain/errors.js';
 import { ProcessRunner } from '../../server/adapters/providers/process-runner.js';
 import { DashboardService } from '../../server/application/dashboard-service.js';
 import { EventStore } from '../../server/application/event-store.js';
@@ -249,6 +250,64 @@ test('a draft that violates the contract is retried once with the reason', async
     assert.match(attempts[1].feedback, /missing node/i);
     assert.equal(draft.status, 'proposed');
     assert.equal(draft.graph.nodes.length, 2);
+  } finally {
+    fixture.close();
+    fixture.gitFixture.close();
+  }
+});
+
+test('a provider that answers with prose instead of JSON is retried with the reason', async () => {
+  // Four of the six adapters only ever get the timeline contract as prose, so
+  // an answer that is not JSON is the most likely way a draft fails. The CLI ran
+  // and exited zero, so this is a contract violation, not an unreachable
+  // provider — exactly what feeding the reason back is for.
+  const attempts = [];
+  const provider = new FakeProvider();
+  provider.draftTimeline = async (request) => {
+    attempts.push(request);
+    if (attempts.length === 1) {
+      throw new AppError('PROVIDER_OUTPUT_INVALID', 'Cursor returned invalid JSON', { status: 502 });
+    }
+    return {
+      nodes: [
+        { id: 'm1', key: 'A', kind: 'milestone', title: 'Build', ordinal: 0 },
+        { id: 's1', key: 'A-1', kind: 'step', parentId: 'm1', title: 'Ship', ordinal: 0 }
+      ],
+      edges: [],
+      gates: []
+    };
+  };
+  const fixture = setup(provider);
+  try {
+    const draft = await fixture.execution.draftTimeline(fixture.project.id, 'Ship it', context('draft-prose'));
+    assert.equal(attempts.length, 2);
+    assert.match(attempts[1].feedback, /invalid JSON/i);
+    assert.equal(draft.status, 'proposed');
+  } finally {
+    fixture.close();
+    fixture.gitFixture.close();
+  }
+});
+
+test('a provider that cannot be launched is not retried', async () => {
+  // The opposite case: retrying an absent CLI buys nothing and costs another
+  // round-trip, so launch and run failures stay outside the repairable set.
+  const attempts = [];
+  const provider = new FakeProvider();
+  provider.draftTimeline = async (request) => {
+    attempts.push(request);
+    throw new AppError('PROVIDER_LAUNCH_FAILED', 'Unable to start cursor-agent', { status: 502 });
+  };
+  const fixture = setup(provider);
+  try {
+    await assert.rejects(
+      () => fixture.execution.draftTimeline(fixture.project.id, 'Ship it', context('draft-launch')),
+      (error) => {
+        assert.equal(error.code, 'PROVIDER_LAUNCH_FAILED');
+        return true;
+      }
+    );
+    assert.equal(attempts.length, 1);
   } finally {
     fixture.close();
     fixture.gitFixture.close();

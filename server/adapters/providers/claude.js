@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { AppError } from '../../domain/errors.js';
 import { ProcessRunner } from './process-runner.js';
-import { failureMessage, isEmptyObject, probeAuth, runCollecting } from './cli-support.js';
+import { failureMessage, isEmptyObject, probeAuth, runCollecting, suggestedModels } from './cli-support.js';
 import { buildTimelinePrompt, timelineSchema } from './timeline-contract.js';
 
 function parseStructuredOutput(output) {
@@ -42,24 +42,28 @@ export class ClaudeProvider {
     this.outputLimitBytes = outputLimitBytes;
   }
 
+  // Declared so the provider roster can tell a user what a backend gives up
+  // before they commit a project to it. Only what a caller actually consults
+  // belongs here: resumption and model discovery were dropped because Gate
+  // resumes nothing (see AGENTS.md) and `listModels().complete` already says
+  // whether a catalog can be enumerated.
   capabilities() {
-    return { streaming: true, resume: false, structuredDrafts: true, modelDiscovery: true };
+    return { streaming: true, structuredDrafts: true };
   }
 
   // The CLI has no machine-readable model list, but it does resolve these
-  // aliases against whatever account `claude auth` is signed in as — an alias
-  // the subscription cannot reach fails the same way a typo does. Offering the
-  // aliases rather than pinned ids keeps Gate correct as models are released.
+  // aliases against whatever account `claude auth` is signed in as. Offering the
+  // aliases rather than pinned ids keeps Gate correct as models are released —
+  // and the catalog is marked incomplete because `--model` also accepts a full
+  // dated id, which Gate must not reject just because it cannot enumerate one.
   async listModels() {
     const status = await probeAuth(this.runner, { executable: this.executable, args: ['auth', 'status'] });
-    return {
-      authenticated: status.authenticated,
-      models: [
-        { id: 'opus', label: 'Opus — most capable' },
-        { id: 'sonnet', label: 'Sonnet — balanced' },
-        { id: 'haiku', label: 'Haiku — fastest' }
-      ]
-    };
+    return suggestedModels(status.authenticated, [
+      { id: 'opus', label: 'Opus — most capable' },
+      { id: 'sonnet', label: 'Sonnet — balanced' },
+      { id: 'haiku', label: 'Haiku — fastest' },
+      { id: 'fable', label: 'Fable — fast and cheap' }
+    ]);
   }
 
   async start(request, observer) {

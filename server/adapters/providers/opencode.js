@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { AppError } from '../../domain/errors.js';
 import { ProcessRunner } from './process-runner.js';
-import { createLineReader, parseTimelineJson } from './cli-support.js';
+import { createLineReader, failureMessage, parseTimelineJson } from './cli-support.js';
 import { buildTimelinePrompt } from './timeline-contract.js';
 
 export const DEFAULT_MODEL = 'opencode/big-pickle';
@@ -57,10 +57,11 @@ function resolveFromShim(shim, directory, { existsSync, readFileSync, pathApi })
   return existsSync(candidate) ? candidate : null;
 }
 
-// `opencode run --format json` writes one JSON object per line. On the wire the
-// user prompt is echoed back as its own finalized text part before the answer, so
-// callers must skip parts that exactly match the prompt and, for drafts, keep only
-// the final text part (the assistant's answer).
+// `opencode run --format json` writes one JSON object per line. Some builds echo
+// the user prompt back as its own finalized text part before the answer, so
+// callers skip parts that exactly match the prompt and, for drafts, keep only the
+// final text part (the assistant's answer). A build that does not echo is
+// unaffected by either guard.
 export class OpenCodeProvider {
   constructor({
     executable,
@@ -75,8 +76,17 @@ export class OpenCodeProvider {
     this.defaultModel = DEFAULT_MODEL;
   }
 
+  // Declared so the provider roster can tell a user what a backend gives up
+  // before they commit a project to it. Only what a caller actually consults
+  // belongs here: resumption and model discovery were dropped because Gate
+  // resumes nothing (see AGENTS.md) and `listModels().complete` already says
+  // whether a catalog can be enumerated.
+  //
+  // `opencode run` has no schema flag — `--format json` frames events, not the
+  // model's answer — so drafting relies on the prose contract, the same as
+  // Gemini, Cursor, and Copilot. Claude and Codex are the only two with a schema.
   capabilities() {
-    return { streaming: true, resume: false, structuredDrafts: true, modelDiscovery: true };
+    return { streaming: true, structuredDrafts: false };
   }
 
   // `opencode models` prints the ids this install can actually reach, one per
@@ -168,7 +178,12 @@ export class OpenCodeProvider {
     );
     const result = await running.completion;
     if (result.exitCode !== 0) {
-      throw new AppError('PROVIDER_FAILED', 'OpenCode timeline drafting failed', { status: 502 });
+      // Every other adapter surfaces the CLI's own reason; a bare exit code is
+      // a 502 the user cannot act on.
+      throw new AppError('PROVIDER_FAILED', failureMessage('OpenCode', parts.join(''), result), {
+        status: 502,
+        details: { exitCode: result.exitCode, signal: result.signal }
+      });
     }
     // The last finalized text part is the assistant's answer; everything before
     // it is the echoed prompt, reasoning, or tool chatter.

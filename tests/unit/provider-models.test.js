@@ -32,12 +32,15 @@ test('opencode reports no models when its CLI fails', async () => {
   assert.deepEqual(catalog, { authenticated: false, models: [] });
 });
 
-test('claude reports aliases and its auth state', async () => {
+test('claude reports aliases as suggestions, not as the reachable set', async () => {
   const runner = new FakeRunner({ stdout: 'Logged in\n' });
   const catalog = await new ClaudeProvider({ executable: 'claude', runner }).listModels();
   assert.deepEqual(runner.requests[0].args, ['auth', 'status']);
   assert.equal(catalog.authenticated, true);
-  assert.deepEqual(catalog.models.map((model) => model.id), ['opus', 'sonnet', 'haiku']);
+  assert.deepEqual(catalog.models.map((model) => model.id), ['opus', 'sonnet', 'haiku', 'fable']);
+  // `--model` also takes a full dated id, which the CLI has no way to enumerate.
+  // Treating these four as exhaustive made Gate reject models it can reach.
+  assert.equal(catalog.complete, false);
 });
 
 test('claude surfaces the CLI reason instead of a generic failure', async () => {

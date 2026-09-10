@@ -193,6 +193,36 @@ test('a provider that cannot list its models takes a typed model id', async ({ p
   await expect(page.getByLabel('Model')).toHaveValue('gpt-6-astra');
 });
 
+test('the settings page names which backends this machine can reach', async ({ page, request }) => {
+  const project = await ensureProject(request);
+  await stubModels(page, [{ id: 'opus', label: 'Opus' }], { complete: false });
+  // The roster probes six real CLIs, so it is stubbed for the same reason the
+  // model catalog is: these assertions are about Gate, not about this box.
+  await page.route('**/api/v1/providers', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          providers: [
+            { kind: 'claude', availability: 'ready', structuredDrafts: true, canDraft: true, models: 4, modelsComplete: false },
+            { kind: 'cursor', availability: 'unreachable', structuredDrafts: false, canDraft: true, models: 0, modelsComplete: true }
+          ],
+          checkedAt: '2026-09-10T00:00:00.000Z'
+        },
+        meta: { apiVersion: 'v1' }
+      })
+    });
+  });
+  await page.goto('/#/settings');
+  await page.getByLabel('Active project').selectOption(String(project.id));
+
+  await expect(page.getByText('Claude Code · signed in')).toBeVisible();
+  // "not detected" rather than "not installed": the probe cannot tell a missing
+  // executable from a signed-out one.
+  await expect(page.getByText('Cursor Agent · not detected')).toBeVisible();
+});
+
 test('a configured model the harness cannot reach is shown as unavailable', async ({ page, request }) => {
   const project = await createProject(request, 'browser-stale-model', 'Stale model');
   await request.patch(`/api/v1/projects/${project.id}/provider`, {

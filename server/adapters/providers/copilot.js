@@ -5,10 +5,9 @@ import { ProcessRunner } from './process-runner.js';
 import { failureMessage, parseTimelineJson, probeAuth, runCollecting, suggestedModels } from './cli-support.js';
 import { buildTimelinePrompt } from './timeline-contract.js';
 
-// Copilot CLI takes the prompt as the value of `-p`; it has no stdin mode. Gate's
-// step prompts are a few KB, which is fine everywhere except Windows, where the
-// command line caps at ~32 KB — noted in the provider docs.
-const PROMPT_FLAG = '-p';
+// Copilot reads a piped prompt from stdin, and ignores stdin entirely if `-p` is
+// also given. Gate uses stdin so a multi-KB step prompt never has to fit in a
+// command line — the ~32 KB Windows ceiling would otherwise truncate one.
 
 // Documented precedence, highest first.
 const TOKEN_VARS = ['COPILOT_GITHUB_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN'];
@@ -33,8 +32,13 @@ export class CopilotProvider {
   // Copilot CLI has no structured output mode at all: it writes prose. Drafting
   // works because the shared timeline contract ships as prose too, but there is
   // no schema enforcing it, so mark the capability honestly.
+  // Declared so the provider roster can tell a user what a backend gives up
+  // before they commit a project to it. Only what a caller actually consults
+  // belongs here: resumption and model discovery were dropped because Gate
+  // resumes nothing (see AGENTS.md) and `listModels().complete` already says
+  // whether a catalog can be enumerated.
   capabilities() {
-    return { streaming: true, resume: false, structuredDrafts: false, modelDiscovery: false };
+    return { streaming: true, structuredDrafts: false };
   }
 
   // Model strings are only discoverable from `copilot help` prose, which is not
@@ -51,8 +55,6 @@ export class CopilotProvider {
       {
         executable: this.executable,
         args: [
-          PROMPT_FLAG,
-          request.prompt,
           // The run already happens inside an isolated linked worktree, so full
           // tool access is bounded by the worktree, not the repository.
           '--allow-all-tools',
@@ -60,6 +62,7 @@ export class CopilotProvider {
           ...(request.model ? ['--model', request.model] : [])
         ],
         cwd: request.cwd,
+        input: request.prompt,
         env: request.env || process.env,
         outputLimitBytes: request.outputLimitBytes || this.outputLimitBytes,
         signal: request.signal
@@ -78,8 +81,6 @@ export class CopilotProvider {
     const { output, result } = await runCollecting(this.runner, {
       executable: this.executable,
       args: [
-        PROMPT_FLAG,
-        prompt,
         // No `--allow-all-tools`: drafting gets no shell and no writes. `-s`
         // drops the stats banner so stdout is the answer alone, and
         // `--no-ask-user` stops the CLI blocking on a question it cannot ask.
@@ -88,6 +89,7 @@ export class CopilotProvider {
         ...(model ? ['--model', model] : [])
       ],
       cwd,
+      input: prompt,
       env: env || process.env,
       outputLimitBytes: this.outputLimitBytes
     });

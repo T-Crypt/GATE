@@ -10,6 +10,7 @@ import { FeatureService } from '../../server/application/feature-service.js';
 import { ContextCompiler } from '../../server/application/context-compiler.js';
 import { InstructionService } from '../../server/application/instruction-service.js';
 import { ProjectService } from '../../server/application/project-service.js';
+import { ProviderService } from '../../server/application/provider-service.js';
 import { MemoryService } from '../../server/application/memory-service.js';
 import { GitAdapter } from '../../server/adapters/git.js';
 import { TimelineService } from '../../server/application/timeline-service.js';
@@ -62,7 +63,8 @@ function setup({ providers } = {}) {
     },
     reviews: { get: () => ({ gates: [], evidence: [], approvals: [] }) },
     dashboard: { summary: () => ({ issues: [], notes: [], gitEvents: [] }) },
-    providers
+    providers,
+    providerRoster: new ProviderService({ providers: providers || new Map() })
   };
   return {
     ...database,
@@ -407,6 +409,69 @@ test('a provider that cannot list its models accepts any id the user supplies', 
 
     assert.equal(accepted.status, 200);
     assert.equal(accepted.body.data.providerConfig.model, 'gpt-6-astra');
+  } finally {
+    fixture.close();
+  }
+});
+
+
+test('the provider roster reports reachability before a project commits to a backend', async () => {
+  const fixture = setup({
+    providers: new Map([
+      [
+        'ready',
+        {
+          draftTimeline: async () => ({}),
+          capabilities: () => ({ streaming: true, structuredDrafts: true }),
+          listModels: async () => ({ authenticated: true, models: [{ id: 'a' }, { id: 'b' }] })
+        }
+      ],
+      [
+        'signed-out',
+        {
+          capabilities: () => ({ streaming: true, structuredDrafts: false }),
+          listModels: async () => ({ authenticated: false, complete: false, models: [] })
+        }
+      ],
+      [
+        'broken',
+        {
+          capabilities: () => ({ streaming: false, structuredDrafts: false }),
+          // A CLI that is not installed makes the adapter throw. That is an
+          // answer about the provider, not a failure of the request.
+          listModels: async () => {
+            throw new Error('spawn ENOENT');
+          }
+        }
+      ]
+    ])
+  });
+  try {
+    const response = await request(fixture.app).get('/api/v1/providers');
+    assert.equal(response.status, 200);
+    const roster = response.body.data.providers;
+    assert.deepEqual(roster.map((entry) => entry.kind), ['ready', 'signed-out', 'broken']);
+    assert.deepEqual(roster.map((entry) => entry.availability), ['ready', 'unreachable', 'unknown']);
+
+    const [ready, signedOut, broken] = roster;
+    assert.equal(ready.structuredDrafts, true);
+    assert.equal(ready.canDraft, true, 'only this one implements draftTimeline');
+    assert.equal(ready.models, 2);
+    assert.equal(ready.modelsComplete, true);
+    assert.equal(signedOut.canDraft, false);
+    assert.equal(signedOut.modelsComplete, false, 'a suggestion list is not a catalog');
+    assert.equal(broken.models, 0);
+  } finally {
+    fixture.close();
+  }
+});
+
+test('an unknown provider kind is a 404 rather than an empty roster entry', async () => {
+  const fixture = setup({ providers: new Map() });
+  try {
+    const response = await request(fixture.app).get('/api/v1/providers/nope/models');
+    assert.equal(response.status, 404);
+    assert.equal(response.body.error.code, 'UNKNOWN_PROVIDER');
   } finally {
     fixture.close();
   }
