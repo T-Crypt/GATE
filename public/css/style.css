@@ -359,6 +359,19 @@ input::placeholder,textarea::placeholder { color: var(--faint); }
 .feature-plan { margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); }
 .feature-impact-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin: 12px 0; }
 .feature-impact-list { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 10px; }
+/* Memory leads with Ask; the graph tools sit behind one disclosure so the page
+   opens short and expands on intent. */
+.memory-primary { border-color: rgba(100,216,255,.22); }
+.memory-exploration { grid-column: 1 / -1; }
+.memory-exploration > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; color: var(--text-soft); cursor: pointer; }
+.memory-exploration > summary > span:first-child { display: grid; gap: 3px; }
+.memory-exploration > summary strong { font-size: 13px; }
+.memory-exploration[open] > summary { border-bottom: 1px solid var(--line); }
+.memory-exploration-body { display: grid; gap: 14px; padding: 18px; }
+.memory-tool { border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); }
+.memory-tool .panel-header { padding: 12px 14px; }
+.memory-tool .panel-body { padding: 14px; }
+.memory-truncated { color: var(--amber); }
 .inbox-list { display: grid; gap: 8px; }
 .inbox-item { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); }
 .inbox-item[data-kind="plan_stale"] { border-color: rgba(255,126,145,.26); }

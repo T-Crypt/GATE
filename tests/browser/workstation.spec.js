@@ -435,3 +435,25 @@ test('the planning inbox lists what needs a decision and dismissing clears it', 
   await expect(page.locator(`[data-inbox-item="${item.key}"]`)).toHaveCount(0);
   await expect(page.getByText('Nothing is waiting on you')).toBeVisible();
 });
+
+test('memory leads with Ask and keeps the graph tools behind one disclosure', async ({ page, request }) => {
+  await ensureProject(request);
+  await page.goto('/#/memory');
+
+  // Ask is the primary entry point, so it is the first panel on the page.
+  const panels = page.locator('.memory-grid > *');
+  await expect(panels.first()).toContainText('Ask memory');
+  await expect(page.getByRole('heading', { name: 'Ask memory' })).toBeVisible();
+
+  // Exploration tools open on intent; the page does not lead with them.
+  const overviewButton = page.getByRole('button', { name: 'Load overview' });
+  await expect(overviewButton).toBeHidden();
+  await page.locator('.memory-exploration > summary').click();
+  await expect(overviewButton).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Path', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Neighborhood' })).toBeVisible();
+
+  // The overview is a whole-graph analysis, so its cost is stated up front.
+  await expect(overviewButton.locator('xpath=..')).toContainText(/\d+ nodes/);
+  await expect(page.locator('#memoryOverviewResults')).toContainText('up to 5,000 nodes');
+});
