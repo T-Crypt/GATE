@@ -326,3 +326,60 @@ test('a failed draft explains itself instead of silently resetting', async ({ pa
   await expect(page.locator('.draft-error')).toContainText('Claude timeline drafting failed');
   await expect(draftButton).toBeEnabled();
 });
+
+test('a run started against a drifted plan keeps its warning on screen', async ({ page, request }) => {
+  const project = await createProject(request, 'browser-stale-plan', 'Drifted plan fixture');
+  await request.put(`/api/v1/projects/${project.id}/timeline`, {
+    headers: { 'Idempotency-Key': 'browser-stale-plan-timeline' },
+    data: {
+      nodes: [
+        { id: 'drift-milestone', key: 'D', kind: 'milestone', title: 'Drifted work' },
+        { id: 'drift-step', key: 'D-1', kind: 'step', parentId: 'drift-milestone', title: 'Change cancellation' }
+      ],
+      edges: [],
+      gates: []
+    }
+  });
+  // The service already computes planWarnings; the defect was purely that the
+  // page threw the response away. Stub the start so the assertion is about
+  // what the UI renders, not about provider timing.
+  await page.route(`**/api/v1/projects/${project.id}/runs`, async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          id: 'stub-run', projectId: project.id, nodeId: 'drift-step', status: 'running',
+          planWarnings: [{
+            projectId: project.id,
+            planningRequestId: '11111111-1111-4111-8111-111111111111',
+            status: 'STALE',
+            reason: '1 file this plan was grounded on changed: src/provider.js.',
+            changedGroundingFiles: ['src/provider.js']
+          }]
+        },
+        meta: { apiVersion: 'v1' }
+      })
+    });
+  });
+
+  await page.goto('/#/timeline');
+  await page.getByLabel('Active project').selectOption(String(project.id));
+  await page.getByRole('button', { name: 'Run D-1' }).click();
+
+  const warning = page.getByTestId('plan-warnings');
+  await expect(warning).toBeVisible();
+  await expect(warning).toContainText('STALE');
+  await expect(warning).toContainText('src/provider.js');
+  await expect(warning.getByRole('button', { name: 'Re-ground milestone' })).toBeVisible();
+
+  // A toast would already be gone; the warning must survive the re-render the
+  // live event stream triggers, and a trip through another view.
+  await page.getByRole('link', { name: 'Overview' }).click();
+  await page.getByRole('link', { name: 'Timeline' }).click();
+  await expect(page.getByTestId('plan-warnings')).toContainText('STALE');
+
+  await page.getByTestId('plan-warnings').getByRole('button', { name: 'Dismiss' }).click();
+  await expect(page.getByTestId('plan-warnings')).toHaveCount(0);
+});

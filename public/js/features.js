@@ -12,7 +12,26 @@ function stalenessPanel(plan, staleness) {
   const actions = staleness.status === 'CURRENT'
     ? ''
     : `<div class="button-row"><button class="button" data-reground-plan="${escapeHtml(plan.id)}">Re-ground milestone</button><span class="muted-copy">Keeping the existing plan changes nothing.</span></div>`;
-  return `<p class="settings-copy"><span class="badge">${escapeHtml(staleness.status)}</span> ${escapeHtml(staleness.reason)}</p>${changed.length ? `<ul class="feature-impact-list">${changed.map((file) => `<li><code>${escapeHtml(file)}</code></li>`).join('')}</ul>` : ''}${actions}`;
+  return `<p class="settings-copy">${stalenessBadge(staleness.status)} ${escapeHtml(staleness.reason)}</p>${changed.length ? `<ul class="feature-impact-list">${changed.map((file) => `<li><code>${escapeHtml(file)}</code></li>`).join('')}</ul>` : ''}${actions}`;
+}
+
+// CURRENT, POSSIBLY_STALE, and STALE mean different things to a human about to
+// start work, so they must not render identically. The classes map onto the
+// existing green/amber/red status palette rather than a new color system.
+export function stalenessBadge(status) {
+  const known = ['CURRENT', 'POSSIBLY_STALE', 'STALE'].includes(status) ? status.toLowerCase() : 'unknown';
+  return `<span class="badge staleness ${known}">${escapeHtml(status)}</span>`;
+}
+
+// The pre-execution staleness check is only worth computing if the human sees
+// it. A toast scrolls away before a run finishes starting, so warnings render
+// as a panel that stays until it is dismissed or re-grounded.
+export function planWarningPanel(warnings) {
+  if (!warnings?.length) return '';
+  return `<section class="panel plan-warning" role="alert" data-testid="plan-warnings"><div class="panel-header"><div><p class="eyebrow">Pre-execution check</p><h2>${warnings.length === 1 ? 'This run started against a drifted plan' : `${warnings.length} runs started against drifted plans`}</h2></div><button class="button" data-dismiss-plan-warnings>Dismiss</button></div><div class="panel-body">${warnings.map((warning) => {
+    const changed = warning.changedGroundingFiles || [];
+    return `<article class="plan-warning-item"><p class="settings-copy">${stalenessBadge(warning.status)} ${escapeHtml(warning.reason)}</p>${changed.length ? `<ul class="feature-impact-list">${changed.map((file) => `<li><code>${escapeHtml(file)}</code></li>`).join('')}</ul>` : ''}<div class="button-row"><button class="button" data-reground-plan="${escapeHtml(warning.planningRequestId)}">Re-ground milestone</button><a class="view-all-link" href="#/inbox">Open in inbox &rarr;</a></div></article>`;
+  }).join('')}<p class="field-hint">The run was not blocked. Gate never rewrites an approved plan on your behalf.</p></div></section>`;
 }
 
 export function planningReview(plan, staleness) {

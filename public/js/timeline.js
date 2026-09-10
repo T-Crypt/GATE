@@ -1,5 +1,10 @@
 import { emptyState, escapeHtml, modelSelectOptions, providerModelDefault, providerName, showToast } from './components.js';
-import { bindPlanningReview, planningReview } from './features.js';
+import { bindPlanningReview, planningReview, planStaleness, planWarningPanel } from './features.js';
+
+// Warnings outlive a re-render: a live event stream re-renders the timeline
+// within moments of a run starting, and the whole point of the pre-execution
+// check is that the human still sees it afterwards.
+const activePlanWarnings = new Map();
 
 const passedStatuses = new Set(['complete', 'approved']);
 
@@ -20,6 +25,13 @@ function milestoneColorClass(key) {
   let hash = 0;
   for (const char of String(key)) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   return `mc-${hash % MILE_COLOR_COUNT}`;
+}
+
+// One entry per plan: starting two steps grounded on the same drifted plan is
+// one thing for the human to decide, not two.
+function recordPlanWarnings(projectId, warnings) {
+  const byPlan = new Map(warnings.map((warning) => [warning.planningRequestId, warning]));
+  activePlanWarnings.set(projectId, [...byPlan.values()]);
 }
 
 function ownerMilestoneId(node) {
@@ -167,6 +179,7 @@ export async function initTimeline(container, { project, api, onRunChanged }) {
         <form id="goalForm" class="goal-form"><label class="sr-only" for="goalInput">Project goal</label><textarea id="goalInput" rows="2" placeholder="Describe the outcome, constraints, and review expectations…" required minlength="3"></textarea><div class="goal-options"><div class="field"><label for="draftModel">Draft model</label><select id="draftModel">${modelOptions(project, modelCatalog)}</select></div></div><button class="button primary" type="submit">Draft timeline</button></form>
         <div id="draftResult"></div>
       </section>
+      <div id="planWarnings">${planWarningPanel(activePlanWarnings.get(project.id) || [])}</div>
       <section class="timeline-toolbar">
         <div class="timeline-summary"><span><strong>${completed}</strong> / ${steps} steps complete</span><span>${timeline.edges.length} dependencies</span><span>${timeline.gates.length} gates</span></div>
         <div class="button-row"><button class="button" id="fitTimeline">Fit timeline</button><button class="button primary" id="scheduleNext" ${steps ? '' : 'disabled'}>Start automatic execution</button></div>
@@ -182,6 +195,16 @@ export async function initTimeline(container, { project, api, onRunChanged }) {
           return `<section class="milestone-lane ${milestoneColorClass(milestone.key)}" data-node-id="${escapeHtml(milestone.id)}"><header><span class="milestone-key">${escapeHtml(milestone.key)}</span><div><h2>${escapeHtml(milestone.title)}</h2><p>${escapeHtml(milestone.description || `${steps.length} guided steps`)}</p>${info.locked ? `<p class="mile-gated-tag">Gated by ${escapeHtml(info.gatingKeys.join(', '))}</p>` : ''}</div><div class="milestone-actions"><span class="badge"><span class="status-dot ${escapeHtml(aggregate.tone)}"></span>${escapeHtml(aggregate.label)}</span><button class="button" data-expand-milestone="${escapeHtml(milestone.id)}">Expand</button></div></header><div class="milestone-expansion"></div><div class="milestone-steps">${steps.map((step) => renderStep(step, timeline)).join('')}</div></section>`;
         }).join('')}</div></div>` : emptyState('TL', 'No timeline yet', `Describe the outcome above. ${providerName(project.providerKind)} can propose a dependency-aware plan for review.`)}
       </section>`;
+
+    const warningPanel = container.querySelector('#planWarnings');
+    warningPanel.querySelector('[data-dismiss-plan-warnings]')?.addEventListener('click', () => {
+      activePlanWarnings.delete(project.id);
+      warningPanel.innerHTML = '';
+    });
+    bindPlanningReview(warningPanel, { project, api, onAccepted: async () => {
+      activePlanWarnings.delete(project.id);
+      await initTimeline(container, { project, api, onRunChanged });
+    } });
 
     const redraw = () => drawConnections(container, timeline);
     requestAnimationFrame(redraw);
@@ -236,7 +259,8 @@ export async function initTimeline(container, { project, api, onRunChanged }) {
     container.querySelectorAll('[data-run-node]').forEach((button) => button.addEventListener('click', async () => {
       button.disabled = true;
       try {
-        await api.startStep(project.id, button.dataset.runNode);
+        const run = await api.startStep(project.id, button.dataset.runNode);
+        recordPlanWarnings(project.id, run?.planWarnings || []);
         showToast(`${providerName(project.providerKind)} run started`);
         await onRunChanged?.();
         await initTimeline(container, { project, api, onRunChanged });
@@ -249,8 +273,9 @@ export async function initTimeline(container, { project, api, onRunChanged }) {
       button.disabled = true;
       try {
         const plan = await api.expandMilestone(project.id, button.dataset.expandMilestone);
+        const staleness = await planStaleness(api, project, [plan]);
         const target = button.closest('.milestone-lane').querySelector('.milestone-expansion');
-        target.innerHTML = planningReview(plan);
+        target.innerHTML = planningReview(plan, staleness[plan.id]);
         bindPlanningReview(target, { project, api, onAccepted: () => initTimeline(container, { project, api, onRunChanged }) });
         showToast('Milestone expansion proposed');
       } catch (error) { showToast(error.message, 'error'); button.disabled = false; }
@@ -258,6 +283,7 @@ export async function initTimeline(container, { project, api, onRunChanged }) {
     container.querySelector('#scheduleNext')?.addEventListener('click', async () => {
       try {
         const runs = await api.schedule(project.id);
+        recordPlanWarnings(project.id, runs.flatMap((run) => run.planWarnings || []));
         showToast(runs.length ? 'Automatic execution started' : 'No step is ready');
         await onRunChanged?.();
         await initTimeline(container, { project, api, onRunChanged });

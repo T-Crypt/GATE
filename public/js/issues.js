@@ -1,5 +1,5 @@
 import { emptyState, escapeHtml, showToast } from './components.js';
-import { bindPlanningReview, planningReview } from './features.js';
+import { bindPlanningReview, planningReview, planStaleness } from './features.js';
 
 const COLUMNS = [
   ['open', 'Open'],
@@ -84,8 +84,9 @@ export async function initIssues(container, { project, api }) {
       button.disabled = true;
       try {
         const plan = await api.planIssue(project.id, button.dataset.planIssue);
+        const staleness = await planStaleness(api, project, [plan]);
         const target = container.querySelector('#issuePlanReview');
-        target.innerHTML = planningReview(plan);
+        target.innerHTML = planningReview(plan, staleness[plan.id]);
         bindPlanningReview(target, { project, api, onAccepted: () => initIssues(container, { project, api }) });
         showToast('Issue plan proposed');
       } catch (error) { showToast(error.message, 'error'); button.disabled = false; }
