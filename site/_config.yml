@@ -11,6 +11,8 @@ author:
 nav_main:
   - title: Overview
     url: /
+  - title: Docs
+    url: /docs/setup/
   - title: GitHub
     url: https://github.com/T-Crypt/GATE
 

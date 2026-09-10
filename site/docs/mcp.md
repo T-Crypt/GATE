@@ -113,8 +113,15 @@ See [Project intelligence]({% link docs/project-intelligence.md %}) for what is 
 | `memory_search` | `projectId`, `query`, optional `limit`, `type` | Combine exact structural matches with local FTS5 source retrieval and explain each match. |
 | `memory_neighbors` | `projectId`, `nodeId`, optional `depth`, `edgeTypes[]` | Traverse a bounded neighborhood through selected `CONTAINS`, `IMPORTS`, and `REFERENCES` edges. |
 | `memory_impact` | `projectId`, `query`, optional `limit` (≤ 25) | Return matching symbols/files, declaring files, transitive production dependents, tests, risk, and structural reasons. |
+| `memory_explain` | `projectId`, `nodeId`, optional `query` | Explain why one node is relevant: what matched, which recorded edges connect it, and where the fact came from. |
+| `memory_god_nodes` | `projectId`, optional `limit` (≤ 100), `edgeTypes[]` | Rank structurally central nodes by recorded in/out degree. |
+| `memory_communities` | `projectId`, optional `limit`, `members`, `edgeTypes[]` | Group the graph into connected components over import and reference edges. |
+| `memory_path` | `projectId`, `fromNodeId`, `toNodeId`, optional `maxHops` (≤ 6), `edgeTypes[]` | Find the shortest recorded edge path between two nodes, or report that none exists within the hop cap. |
+| `memory_query` | `projectId`, `question` (≤ 2,000 chars), optional `budget` (256–32,000) | Answer a question from Memory. Every statement cites a repository location and only recorded edges are used. |
 | `memory_refresh` | `projectId`, optional `force`, `idempotencyKey` | Idempotently build or incrementally refresh the local index. |
 | `memory_context` | `projectId`, `goal`, optional `kind` (`context`, `planning`, or `execution`), `tokenBudget` (512–32,000), `idempotencyKey` | Idempotently compile and persist a token-budgeted context capsule. It requires current Memory, injects project instructions, and returns full commit, graph, file, and retrieval provenance. |
+
+Graph analysis is computed from the persisted node and edge tables at request time — there is no second index and no stored centrality. Centrality and community detection analyze at most 5,000 nodes and report `truncated` beyond that. A Memory answer never infers a relationship the indexer did not record.
 
 `memory_refresh` and `memory_context` are mutations and require `idempotencyKey`. Memory tools operate only on the connected local repository. Context compilation does not send source or instruction content to a provider.
 
@@ -132,8 +139,21 @@ Durable Feature workspaces and grounded planning requests are described in [Proj
 | `issue_plan` | `projectId`, `issueId`, optional `model`, `tokenBudget`, `idempotencyKey` | Convert a local issue into the same grounded planning flow. |
 | `milestone_expand` | `projectId`, `milestoneId`, optional `model`, `tokenBudget`, `idempotencyKey` | Propose child steps for a milestone without altering the accepted timeline. |
 | `planning_get` | `projectId`, `planningRequestId` | Inspect a proposed or accepted planning request: impact, context provenance, and the proposed draft. |
+| `planning_check_staleness` | `projectId`, `planningRequestId` | Compare a plan against current repository state: `CURRENT`, `POSSIBLY_STALE` when the repository moved without touching the plan's grounding, or `STALE` when a grounding file changed. |
+| `planning_reground` | `projectId`, `planningRequestId`, optional `model`, `tokenBudget`, `idempotencyKey` | Propose a fresh Memory-grounded plan for the same source, linked to the plan it supersedes. The original is never modified or discarded. |
 
 Feature planning mutations require `idempotencyKey`. MCP cannot accept a proposal — there is deliberately no accept tool; acceptance exists only through the localhost human-facing interface (`POST .../planning/:requestId/accept`), which the server keeps on a loopback bind by default.
+
+### Planning inbox
+
+The inbox collects what is waiting on a human decision — see [Project intelligence]({% link docs/project-intelligence.md %}).
+
+| Tool | Input | Description |
+| --- | --- | --- |
+| `inbox_list` | `projectId` | List drifted accepted plans, proposals awaiting acceptance, and failed runs with no follow-up issue. Items are derived from current records, never stored separately. |
+| `inbox_dismiss` | `projectId`, `itemKey`, `idempotencyKey` | Record that one derived item needs no action. The planning request or run it came from is never modified. |
+
+Dismissal is the only inbox mutation, and it is append-only. There is no inbox accept tool, for the same reason there is no approval tool.
 
 Every tool above takes `idempotencyKey` for mutations (read tools take none).
 
