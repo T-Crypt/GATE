@@ -14,7 +14,7 @@ description: Gate — a localhost-first control plane for human-reviewed AI deve
 
 ## What it does
 
-- **Plans before it acts.** You give Gate a goal and repository context. The provider returns a graph of milestones and steps with explicit dependencies and gates — not a wall of text. Nothing executes until you accept the draft.
+- **Plans before it acts.** You give Gate a goal and repository context. The provider you picked returns a graph of milestones and steps with explicit dependencies and gates — not a wall of text. Nothing executes until you accept the draft. Six agent CLIs can be that provider; Settings chooses one per project and reports which of them this machine can actually reach.
 - **Runs in isolation.** Every accepted step gets its own linked worktree on a branch named with the project's run-branch prefix (`work/gate-<run-id>` by default, per-project configurable), created from your base branch without checking it out or modifying it. Gate refuses to start a run if that base checkout has uncommitted changes.
 - **Never touches your protected branches.** Connect auto-detects the repository's default branch as the single protected base; optional stable and production branches can be added from Settings. Gate will not execute, merge, push, delete, or rewrite protected branches. There is no merge or integration command anywhere in the app — a human reviews the resulting branch and decides what happens to it, outside Gate entirely.
 - **Shows the remote picture without writing to it.** With `GATE_GITHUB_TOKEN` set, the Git view observes open pull requests and repository issues over the GitHub API — read-only. Gate never creates, merges, or pushes a branch on your behalf.
@@ -39,7 +39,7 @@ description: Gate — a localhost-first control plane for human-reviewed AI deve
 
 ## Quick start
 
-Requirements: Node.js 24+, Git, and a provider CLI authenticated locally.
+Requirements: Node.js 24+, Git, and at least one local provider CLI authenticated — `claude`, `opencode`, `codex`, `gemini`, `cursor-agent`, or `copilot`.
 
 ```bash
 npm ci

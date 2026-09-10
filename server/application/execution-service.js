@@ -33,13 +33,23 @@ function internalContext(context, suffix, actor = context.actor) {
 }
 
 // Contract violations are worth one more attempt; a provider that failed to
-// run, timed out, or returned nothing is not going to do better unprompted.
+// launch, run, or exit cleanly is not going to do better unprompted.
+//
+// The two PROVIDER_OUTPUT_* codes belong here even though an adapter raises
+// them: they mean the CLI ran and exited zero, and then answered with prose, a
+// fence Gate could not unwrap, or an empty object. Four of the six providers
+// only ever get the contract as prose, so that is the single most likely way a
+// draft fails — and it is exactly what feeding the reason back can fix.
+// PROVIDER_LAUNCH_FAILED and PROVIDER_FAILED stay out on purpose: those are the
+// unavailable-CLI cases, where a retry buys nothing and costs another ~30s.
 const REPAIRABLE_DRAFT_CODES = new Set([
   'VALIDATION_FAILED',
   'INVALID_PARENT',
   'INVALID_GATE_NODE',
   'DANGLING_EDGE',
-  'TIMELINE_CYCLE'
+  'TIMELINE_CYCLE',
+  'PROVIDER_OUTPUT_INVALID',
+  'PROVIDER_OUTPUT_INCOMPLETE'
 ]);
 
 function isRepairableDraft(error) {

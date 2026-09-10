@@ -1,5 +1,5 @@
 title: Gate
-description: A localhost-first control plane for human-reviewed AI development. Claude proposes a timeline of gated steps, you approve it, and only then does anything run.
+description: A localhost-first control plane for human-reviewed AI development. Your coding agent proposes a timeline of gated steps, you approve it, and only then does anything run.
 url: "https://t-crypt.github.io"
 baseurl: "/GATE"
 repository: "T-Crypt/GATE"

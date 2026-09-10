@@ -38,13 +38,20 @@ function draftArgs({ schemaPath, messagePath, model }) {
 // Codex also streams human-readable progress on stderr, which Gate forwards
 // verbatim, so a shape this misses is never a silent run.
 function eventText(event) {
-  if (event.type === 'error') {
+  // A fatal thread error arrives as `error`; a turn that gives up arrives as
+  // `turn.failed` with the reason nested under `error`. Missing the second one
+  // left a failed run with no explanation on stdout at all.
+  if (event.type === 'error' || event.type === 'turn.failed') {
     const message = event.message || event.error?.message;
     return message ? `[codex error] ${message}\n` : null;
   }
   if (event.type !== 'item.completed') return null;
   const item = event.item || {};
+  // The SDK's discriminator is `type`; older builds sent `item_type`.
   const kind = item.item_type || item.type;
+  if (kind === 'error') {
+    return item.message ? `[codex error] ${item.message}\n` : null;
+  }
   if (kind === 'command_execution') {
     return item.command ? `$ ${item.command}\n` : null;
   }
@@ -72,8 +79,13 @@ export class CodexProvider {
     this.tmpDir = tmpDir;
   }
 
+  // Declared so the provider roster can tell a user what a backend gives up
+  // before they commit a project to it. Only what a caller actually consults
+  // belongs here: resumption and model discovery were dropped because Gate
+  // resumes nothing (see site/docs/providers.md) and `listModels().complete` already says
+  // whether a catalog can be enumerated.
   capabilities() {
-    return { streaming: true, resume: false, structuredDrafts: true, modelDiscovery: false };
+    return { streaming: true, structuredDrafts: true };
   }
 
   // Codex has no machine-readable model list and its ids turn over every few

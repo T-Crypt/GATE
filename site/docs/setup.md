@@ -53,7 +53,7 @@ All configuration is via environment variables (see `.env.example`):
 
 > Tokens are read from the environment, never from project configuration or the database. Gate holds no credentials itself.
 
-> Provider credentials belong to the provider CLI, not to Gate. Every adapter inherits the server's environment and relies on that CLI's own login. Two variables are read only as a signed-in *signal*, never sent anywhere: `GEMINI_API_KEY`/`GOOGLE_API_KEY` for the Gemini adapter, and `COPILOT_GITHUB_TOKEN`/`GH_TOKEN`/`GITHUB_TOKEN` for the Copilot adapter — see [Provider adapters]({% link docs/providers.md %}).
+> Provider credentials belong to the provider CLI, not to Gate. Every adapter inherits the server's environment and relies on that CLI's own login. A few variables are read only as a signed-in *signal*, never sent anywhere: `GEMINI_API_KEY`/`GOOGLE_API_KEY` and `GEMINI_CLI_HOME` (which the Gemini CLI resolves its own credential directory from) for the Gemini adapter, and `COPILOT_GITHUB_TOKEN`/`GH_TOKEN`/`GITHUB_TOKEN` for the Copilot adapter. `GET /providers` reports what each probe concluded — see [Provider adapters]({% link docs/providers.md %}).
 
 > `ALLOW_REMOTE_BIND` is the acceptance-boundary escape hatch: with it unset (the default) the server refuses to bind to anything but a loopback address, which is what keeps plan acceptance and gate decisions on the localhost human-facing interface. Setting it `true` exposes the HTTP surface to the network — only do that on a trusted host.
 

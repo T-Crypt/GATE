@@ -15,6 +15,7 @@ import { InboxService } from './application/inbox-service.js';
 import { InstructionService } from './application/instruction-service.js';
 import { MemoryService } from './application/memory-service.js';
 import { ProjectService } from './application/project-service.js';
+import { ProviderService } from './application/provider-service.js';
 import { PlannerService } from './application/planner-service.js';
 import { RemoteService } from './application/remote-service.js';
 import { RepoMirrorService } from './application/repo-mirror.js';
@@ -41,6 +42,7 @@ export function buildServices({ db, config, providers }) {
         ['copilot', CopilotProvider]
       ].map(([kind, Provider]) => [kind, new Provider({ outputLimitBytes: config.outputLimitBytes })])
     );
+  const providerRoster = new ProviderService({ providers: providerMap });
   const repoMirror = new RepoMirrorService({ db, projects });
   repoMirror.attach(events);
   const remoteAdapter = new GithubRemoteAdapter({
@@ -81,6 +83,7 @@ export function buildServices({ db, config, providers }) {
     dashboard: new DashboardService(db, events, projects, gitAdapter),
     remote: new RemoteService(db, events, projects, gitAdapter, remoteAdapter, config),
     repoMirror,
-    providers: providerMap
+    providers: providerMap,
+    providerRoster
   };
 }

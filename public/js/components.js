@@ -18,6 +18,19 @@ export function providerName(kind) {
 // What a blank model resolves to, phrased for the hint under the model field.
 // Most CLIs pick their own default from their own config; only OpenCode and
 // Gemini have one Gate can name.
+// One roster entry as a badge. `unreachable` deliberately does not claim the CLI
+// is missing: the probe cannot tell a missing executable from a signed-out one.
+export function providerAvailability(entry) {
+  const label = {
+    ready: 'signed in',
+    unreachable: 'not detected',
+    unknown: 'probe failed'
+  }[entry.availability] || 'unknown';
+  return `<span class="badge provider-availability is-${escapeHtml(entry.availability)}" title="${escapeHtml(
+    entry.structuredDrafts ? 'Drafts against a JSON schema' : 'Drafts against the prose contract'
+  )}">${escapeHtml(providerName(entry.kind))} · ${escapeHtml(label)}</span>`;
+}
+
 export function providerModelDefault(kind) {
   return (
     {

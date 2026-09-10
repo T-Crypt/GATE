@@ -12,7 +12,7 @@ Full documentation is published at **[t-crypt.github.io/GATE](https://t-crypt.gi
 
 ## What it does
 
-**Plans before it acts.** You give Gate a goal and repository context. A local provider returns a graph of milestones and steps with explicit dependencies and gates, not a wall of text. Nothing executes until you accept the draft. The Settings page picks the backend provider per project — Claude Code, OpenCode, Codex, Gemini CLI, Cursor Agent, or Copilot CLI; new projects default to Claude.
+**Plans before it acts.** You give Gate a goal and repository context. A local provider returns a graph of milestones and steps with explicit dependencies and gates, not a wall of text. Nothing executes until you accept the draft. The Settings page picks the backend provider per project — Claude Code, OpenCode, Codex, Gemini CLI, Cursor Agent, or Copilot CLI; new projects default to Claude. It also shows which of those CLIs are installed and signed in on this machine, so an unreachable backend is visible before a run needs it.
 
 **Runs in isolation.** Every accepted step gets its own linked worktree on a branch named with the project's run-branch prefix — `work/gate-<run-id>` by default, and per-project configurable — created from your base branch without ever checking it out or modifying it. Gate refuses to start a run if that base checkout has uncommitted changes.
 
@@ -26,9 +26,13 @@ Full documentation is published at **[t-crypt.github.io/GATE](https://t-crypt.gi
 
 **Shows you the whole plan at once.** The timeline view renders a mile-marker rail across the top: one colored badge per milestone, connected by a track, showing which milestones are gating which. A locked marker tells you exactly which upstream milestone is holding it up. Each milestone's lane carries the same color as its marker, so the overview and the detail stay visually tied together.
 
-**Keeps a copy in your repo.** Gate mirrors each project's timeline, issues, and notes into `<repo>/.gate/` as plain JSON and Markdown, refreshed on every change. The mirror is ignored by default — Gate appends a `.gate/` entry to the repository's `.gitignore` when it first connects. Remove that entry if you want this data to travel with the repo instead of living only in Gate's local database.
+**Keeps a copy in your repo.** Gate mirrors each project's timeline, issues, notes, and features into `<repo>/.gate/` as plain JSON and Markdown, refreshed on every change. The mirror is ignored by default — Gate appends a `.gate/` entry to the repository's `.gitignore` when it first connects. Remove that entry if you want this data to travel with the repo instead of living only in Gate's local database.
 
 **Builds local project intelligence.** GATE Memory incrementally indexes repository files, JavaScript-family symbols, imports, references, and searchable source text into SQLite. Its Memory view supports hybrid search, focused graph traversal, and deterministic impact analysis. The Context Compiler turns those results and project instructions into token-budgeted planning or execution capsules with commit- and node-level provenance; stale indexes are rejected rather than silently used.
+
+**Tells you when a plan has drifted.** An accepted plan is grounded in a commit. Gate compares that grounding against current `HEAD` and classifies it `CURRENT`, `POSSIBLY_STALE`, or `STALE`, naming the grounding files that changed. Starting a step against a drifted plan warns you and keeps the warning on screen; it never blocks the run and never rewrites approved work. Re-grounding proposes a fresh plan linked to the one it supersedes.
+
+**Collects what needs you in one place.** The Planning inbox lists drifted plans, proposals awaiting acceptance, and failed runs with no follow-up issue, offering Analyze, Re-ground, Convert to issue, and Dismiss. Items are derived from existing records rather than stored twice, so the inbox cannot disagree with the timeline.
 
 **Keeps feature work grounded.** Durable Feature workspaces connect intent, structural impact, compiled context, and proposed timeline revisions. Local issues use the same planning path, while milestones can be expanded progressively. Every generated plan stays proposed until it is accepted from the localhost interface.
 

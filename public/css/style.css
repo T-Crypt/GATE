@@ -388,6 +388,12 @@ input::placeholder,textarea::placeholder { color: var(--faint); }
 .badge.staleness.current { border-color: rgba(111,231,173,.32); background: var(--green-soft); color: var(--green); }
 .badge.staleness.possibly_stale { border-color: rgba(247,199,106,.32); background: var(--amber-soft); color: var(--amber); }
 .badge.staleness.stale { border-color: rgba(255,126,145,.32); background: var(--red-soft); color: var(--red); }
+
+.provider-roster { margin-top: 14px; }
+.provider-roster-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.badge.provider-availability.is-ready { border-color: rgba(111,231,173,.32); background: var(--green-soft); color: var(--green); }
+.badge.provider-availability.is-unreachable { border-color: rgba(247,199,106,.32); background: var(--amber-soft); color: var(--amber); }
+.badge.provider-availability.is-unknown { border-color: rgba(255,126,145,.32); background: var(--red-soft); color: var(--red); }
 .plan-warning { margin-bottom: 14px; border-color: rgba(247,199,106,.3); }
 .plan-warning-item { display: grid; gap: 8px; padding: 11px 0; border-bottom: 1px solid var(--line); }
 .plan-warning-item:last-of-type { border-bottom: 0; }

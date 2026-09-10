@@ -8,15 +8,20 @@ import { ProcessRunner } from './process-runner.js';
 import { createLineReader, failureMessage, parseTimelineJson, probeAuth, suggestedModels } from './cli-support.js';
 import { buildTimelinePrompt } from './timeline-contract.js';
 
-// The CLI's own default. Gemini routes `auto` between Pro and Flash by task
-// complexity, which is a better default than pinning either one.
+// The CLI's own default, which is reason enough to use it. Vendor docs disagree
+// with themselves about whether `auto` routes by task complexity or just
+// resolves to Pro, so Gate does not claim either.
 export const DEFAULT_MODEL = 'auto';
 
-// Suggestions, not a catalog — see `listModels`.
+// Suggestions, not a catalog — see `listModels`. These are the CLI's documented
+// model aliases plus the two concrete 2.5 ids; the Gemini 3 ids are still
+// `-preview`-suffixed and turn over, so the aliases are the stable way to ask
+// for them and `complete: false` lets a user type an id Gate has never heard of.
 const SUGGESTED = [
-  { id: 'auto', label: 'auto — routed by task complexity' },
-  { id: 'gemini-3-pro', label: 'gemini-3-pro' },
-  { id: 'gemini-3-flash', label: 'gemini-3-flash' },
+  { id: 'auto', label: 'auto — the CLI default' },
+  { id: 'pro', label: 'pro — most capable' },
+  { id: 'flash', label: 'flash — balanced' },
+  { id: 'flash-lite', label: 'flash-lite — fastest' },
   { id: 'gemini-2.5-pro', label: 'gemini-2.5-pro' },
   { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' }
 ];
@@ -26,7 +31,10 @@ const SUGGESTED = [
 // behind: an API key in the environment, or OAuth credentials on disk.
 export function hasCredentials({ env = process.env, homeDir = os.homedir(), existsSync = fsSync.existsSync } = {}) {
   if (env.GEMINI_API_KEY || env.GOOGLE_API_KEY) return true;
-  return existsSync(path.join(homeDir, '.gemini', 'oauth_creds.json'));
+  // The CLI resolves its own home through GEMINI_CLI_HOME before falling back to
+  // the OS home, so reading only the latter reports a signed-in install as
+  // signed out whenever that override is set.
+  return existsSync(path.join(env.GEMINI_CLI_HOME || homeDir, '.gemini', 'oauth_creds.json'));
 }
 
 // `--output-format json` wraps the answer: { response, stats, error }.
@@ -59,8 +67,13 @@ export class GeminiProvider {
     this.defaultModel = DEFAULT_MODEL;
   }
 
+  // Declared so the provider roster can tell a user what a backend gives up
+  // before they commit a project to it. Only what a caller actually consults
+  // belongs here: resumption and model discovery were dropped because Gate
+  // resumes nothing (see site/docs/providers.md) and `listModels().complete` already says
+  // whether a catalog can be enumerated.
   capabilities() {
-    return { streaming: true, resume: false, structuredDrafts: false, modelDiscovery: false };
+    return { streaming: true, structuredDrafts: false };
   }
 
   async listModels() {
@@ -70,13 +83,17 @@ export class GeminiProvider {
 
   async start(request, observer) {
     const sessionId = randomUUID();
-    // `--output-format stream-json` emits NDJSON events. Shapes differ across
-    // versions, so read text from whichever field carries it; stderr passes
-    // through untouched so progress is visible either way.
+    // `--output-format stream-json` emits NDJSON events carrying text in
+    // `content`. The first one is the whole resolved prompt echoed back with
+    // `role: 'user'`, so an unfiltered reader shows the operator Gate's own
+    // multi-KB step prompt before any model output. Assistant text then arrives
+    // as incremental chunks, which is why chunks are forwarded verbatim rather
+    // than newline-terminated one at a time. stderr passes through untouched.
     const lineReader = createLineReader((event) => {
-      const text = event?.response ?? event?.content ?? event?.delta ?? event?.text;
+      if (event?.role && event.role !== 'assistant') return;
+      const text = event?.content;
       if (typeof text !== 'string' || !text) return;
-      observer?.onOutput?.(text.endsWith('\n') ? text : `${text}\n`, 'stdout');
+      observer?.onOutput?.(text, 'stdout');
     });
     const running = await this.runner.start(
       {

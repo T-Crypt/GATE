@@ -48,7 +48,7 @@ const instructionInput = z.object({
   userContent: z.string().max(100_000)
 });
 
-export function projectsRouter(projects, instructions, providerMap) {
+export function projectsRouter(projects, instructions, providerMap, providerRoster) {
   const router = Router();
   router.get('/projects', (_req, res) => data(res, projects.list()));
   router.get('/projects/:projectId', (req, res) => data(res, projects.get(Number(req.params.projectId))));
@@ -71,6 +71,13 @@ export function projectsRouter(projects, instructions, providerMap) {
       commandContext(req)
     );
     return data(res, project);
+  });
+  // Which backends this machine can reach, before a project commits to one.
+  // Probing is capped and cached in ProviderService; a CLI that is missing or
+  // signed out is data here, never an error, so the settings page always renders.
+  router.get('/providers', async (req, res) => {
+    const refresh = req.query.refresh === 'true';
+    return data(res, await providerRoster.roster({ refresh }));
   });
   router.get('/providers/:kind/models', async (req, res) => {
     const provider = providerMap?.get(req.params.kind);

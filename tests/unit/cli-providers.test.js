@@ -124,9 +124,13 @@ test('codex runs execution in a workspace-write sandbox and surfaces agent messa
   const runner = new FakeRunner({
     stdout: [
       JSON.stringify({ type: 'thread.started', thread_id: 'thread-7' }),
-      JSON.stringify({ type: 'item.completed', item: { item_type: 'command_execution', command: 'npm test' } }),
-      JSON.stringify({ type: 'item.completed', item: { item_type: 'agent_message', text: 'done' } }),
-      JSON.stringify({ type: 'item.completed', item: { item_type: 'unknown_future_kind' } })
+      // `type` is the SDK's discriminator. The adapter still reads `item_type`
+      // for older builds, but a fixture that only exercised the fallback let the
+      // real shape break while the suite stayed green.
+      JSON.stringify({ type: 'item.completed', item: { type: 'command_execution', command: 'npm test' } }),
+      JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'done' } }),
+      JSON.stringify({ type: 'item.completed', item: { type: 'unknown_future_kind' } }),
+      JSON.stringify({ type: 'turn.failed', error: { message: 'context exhausted' } })
     ].join('\n') + '\n',
     stderr: 'progress\n'
   });
@@ -142,6 +146,7 @@ test('codex runs execution in a workspace-write sandbox and surfaces agent messa
   assert.deepEqual(chunks, [
     ['stdout', '$ npm test\n'],
     ['stdout', 'done\n'],
+    ['stdout', '[codex error] context exhausted\n'],
     ['stderr', 'progress\n']
   ]);
 });
@@ -179,16 +184,26 @@ test('gemini surfaces the error inside its envelope', async () => {
 });
 
 test('gemini execution approves tools inside the worktree', async () => {
-  const runner = new FakeRunner({ stdout: `${JSON.stringify({ response: 'working' })}\n` });
+  const runner = new FakeRunner({
+    stdout: [
+      // The CLI replays the resolved prompt as a user-role event before any
+      // model output. Forwarding it showed the operator Gate's own prompt.
+      JSON.stringify({ type: 'message', role: 'user', content: 'the entire step prompt' }),
+      JSON.stringify({ type: 'message', role: 'assistant', content: 'work', delta: true }),
+      JSON.stringify({ type: 'message', role: 'assistant', content: 'ing', delta: true })
+    ].join('\n') + '\n'
+  });
   const chunks = [];
   const session = await new GeminiProvider({ runner }).start(
-    { prompt: 'step', cwd: '/tmp', model: 'gemini-3-pro' },
+    { prompt: 'step', cwd: '/tmp', model: 'gemini-3-pro-preview' },
     { onOutput: (chunk) => chunks.push(chunk) }
   );
   await session.completion;
   assert.equal(argValue(runner.lastArgs, '--approval-mode'), 'yolo');
-  assert.equal(argValue(runner.lastArgs, '--model'), 'gemini-3-pro');
-  assert.deepEqual(chunks, ['working\n']);
+  assert.equal(argValue(runner.lastArgs, '--model'), 'gemini-3-pro-preview');
+  // Incremental chunks are forwarded verbatim; a newline per chunk would have
+  // broken every assistant sentence across several lines.
+  assert.deepEqual(chunks, ['work', 'ing']);
 });
 
 test('gemini treats an api key or stored oauth credentials as signed in', () => {
@@ -196,6 +211,15 @@ test('gemini treats an api key or stored oauth credentials as signed in', () => 
   assert.equal(geminiCredentials({ env: { GOOGLE_API_KEY: 'k' }, existsSync: () => false }), true);
   assert.equal(geminiCredentials({ env: {}, homeDir: '/home/x', existsSync: () => true }), true);
   assert.equal(geminiCredentials({ env: {}, homeDir: '/home/x', existsSync: () => false }), false);
+  // The CLI resolves its own home through this override before the OS home.
+  assert.equal(
+    geminiCredentials({
+      env: { GEMINI_CLI_HOME: '/custom' },
+      homeDir: '/home/x',
+      existsSync: (candidate) => candidate === '/custom/.gemini/oauth_creds.json'
+    }),
+    true
+  );
 });
 
 test('gemini reports signed out when the CLI is present but has no credentials', async () => {
@@ -226,6 +250,10 @@ test('cursor drafts in print mode without --force and unwraps the result envelop
   assert.equal(runner.lastArgs.includes('--print'), true);
   assert.equal(runner.lastArgs.includes('--force'), false, 'drafting must not approve commands');
   assert.equal(argValue(runner.lastArgs, '--output-format'), 'json');
+  // The prompt is the documented positional argument; piped stdin only makes
+  // print mode inferred, it is not read as the prompt.
+  assert.match(runner.lastArgs.at(-1), /Ship it/);
+  assert.equal(runner.requests[0].input, undefined);
 });
 
 test('cursor surfaces an errored result envelope', async () => {
@@ -244,7 +272,8 @@ test('cursor execution streams assistant text and keeps the reported session id'
   const runner = new FakeRunner({
     stdout: [
       JSON.stringify({ type: 'system', session_id: 'sess-3' }),
-      JSON.stringify({ type: 'tool_call', subtype: 'started', tool_call: { name: 'edit' } }),
+      // Each call is keyed by its own field; there is no flat `name`.
+      JSON.stringify({ type: 'tool_call', subtype: 'started', tool_call: { writeToolCall: { args: {} } } }),
       JSON.stringify({ type: 'assistant', message: { content: [{ text: 'patched' }] } })
     ].join('\n') + '\n'
   });
@@ -256,7 +285,8 @@ test('cursor execution streams assistant text and keeps the reported session id'
   await session.completion;
   assert.equal(session.sessionId, 'sess-3');
   assert.equal(runner.lastArgs.includes('--force'), true);
-  assert.deepEqual(chunks, ['· edit\n', 'patched\n']);
+  assert.equal(runner.lastArgs.at(-1), 'step');
+  assert.deepEqual(chunks, ['· writeToolCall\n', 'patched\n']);
 });
 
 // --- copilot ---------------------------------------------------------------
@@ -267,7 +297,10 @@ test('copilot drafts without tool access and tolerates a fenced answer', async (
   assert.deepEqual(graph, GRAPH);
   assert.equal(runner.lastArgs.includes('--allow-all-tools'), false, 'drafting must get no shell and no writes');
   assert.equal(runner.lastArgs.includes('--no-ask-user'), true, 'a headless CLI must never block on a question');
-  assert.match(argValue(runner.lastArgs, '-p'), /Ship it/);
+  // The prompt goes on stdin: `-p` would make Copilot ignore stdin, and a
+  // multi-KB prompt on the command line truncates at Windows' ~32 KB ceiling.
+  assert.equal(runner.lastArgs.includes('-p'), false);
+  assert.match(runner.requests[0].input, /Ship it/);
 });
 
 test('copilot execution allows tools inside the worktree', async () => {
@@ -275,8 +308,8 @@ test('copilot execution allows tools inside the worktree', async () => {
   const session = await new CopilotProvider({ runner }).start({ prompt: 'step body', cwd: '/tmp' }, {});
   await session.completion;
   assert.equal(runner.lastArgs.includes('--allow-all-tools'), true);
-  assert.equal(argValue(runner.lastArgs, '-p'), 'step body');
-  assert.equal(runner.requests[0].input, undefined, 'copilot has no stdin mode');
+  assert.equal(runner.lastArgs.includes('-p'), false);
+  assert.equal(runner.requests[0].input, 'step body');
 });
 
 test('copilot reads its token from the documented environment variables', async () => {
@@ -307,7 +340,12 @@ test('every shipped adapter satisfies the provider contract', async () => {
       assert.equal(typeof provider.start, 'function', `${kind} must implement start`);
       assert.equal(typeof provider.draftTimeline, 'function', `${kind} must implement draftTimeline`);
       assert.equal(typeof provider.listModels, 'function', `${kind} must implement listModels`);
-      assert.equal(typeof provider.capabilities().structuredDrafts, 'boolean', `${kind} must declare capabilities`);
+      const capabilities = provider.capabilities();
+      assert.equal(typeof capabilities.structuredDrafts, 'boolean', `${kind} must declare capabilities`);
+      assert.equal(typeof capabilities.streaming, 'boolean', `${kind} must declare capabilities`);
+      // Dropped deliberately: Gate resumes no run, and `listModels().complete`
+      // already reports whether a catalog can be enumerated.
+      assert.deepEqual(Object.keys(capabilities).sort(), ['streaming', 'structuredDrafts']);
     }
   } finally {
     database.close?.();
