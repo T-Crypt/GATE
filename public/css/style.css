@@ -359,6 +359,17 @@ input::placeholder,textarea::placeholder { color: var(--faint); }
 .feature-plan { margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); }
 .feature-impact-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin: 12px 0; }
 .feature-impact-list { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 10px; }
+.inbox-list { display: grid; gap: 8px; }
+.inbox-item { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); }
+.inbox-item[data-kind="plan_stale"] { border-color: rgba(255,126,145,.26); }
+.inbox-item[data-kind="run_failed"] { border-color: rgba(247,199,106,.26); }
+.inbox-item-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.inbox-item-head strong { font-size: 12px; }
+.inbox-detail { margin: 0; color: var(--text-soft); font-size: 11px; }
+.inbox-subject { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-actions { margin-top: 2px; align-items: center; }
+.inbox-counts { display: flex; flex-wrap: wrap; gap: 6px; }
+.inbox-result:empty { display: none; }
 /* Plan staleness reuses the semantic status palette gates and runs already use:
    green current, amber unverified, red drifted. */
 .badge.staleness.current { border-color: rgba(111,231,173,.32); background: var(--green-soft); color: var(--green); }

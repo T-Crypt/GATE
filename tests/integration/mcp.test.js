@@ -70,6 +70,9 @@ test('MCP exposes compact timeline and review tools', async () => {
     assert.ok(names.includes('milestone_expand'));
     assert.ok(names.includes('planning_check_staleness'));
     assert.ok(names.includes('planning_reground'));
+    assert.ok(names.includes('inbox_list'));
+    assert.ok(names.includes('inbox_dismiss'));
+    assert.equal(names.includes('inbox_accept'), false);
     assert.equal(names.includes('gate_decide'), false);
 
     const result = await fixture.client.callTool({
@@ -79,6 +82,35 @@ test('MCP exposes compact timeline and review tools', async () => {
     assert.equal(result.isError, undefined);
     assert.equal(result.structuredContent.projectId, 1);
     assert.deepEqual(result.structuredContent.nodes, []);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test('MCP reads the derived planning inbox and can dismiss one item', async () => {
+  const fixture = await setup();
+  try {
+    fixture.db.prepare(
+      `INSERT INTO runs(id, project_id, provider_kind, branch, worktree_path, base_sha, head_sha, status, finished_at)
+       VALUES ('44444444-4444-4444-8444-444444444444', 1, 'claude', 'work/gate-44444444', '/tmp/worktree', 'base', 'head', 'failed', datetime('now'))`
+    ).run();
+
+    const listed = await fixture.client.callTool({ name: 'inbox_list', arguments: { projectId: 1 } });
+    assert.equal(listed.isError, undefined);
+    const item = listed.structuredContent.items.find((entry) => entry.kind === 'run_failed');
+    assert.equal(item.runId, '44444444-4444-4444-8444-444444444444');
+
+    const dismissed = await fixture.client.callTool({
+      name: 'inbox_dismiss',
+      arguments: { projectId: 1, itemKey: item.key, idempotencyKey: 'mcp-inbox-dismiss' }
+    });
+    assert.equal(dismissed.isError, undefined);
+    assert.equal(dismissed.structuredContent.itemKey, item.key);
+
+    const after = await fixture.client.callTool({ name: 'inbox_list', arguments: { projectId: 1 } });
+    assert.equal(after.structuredContent.items.some((entry) => entry.key === item.key), false);
+    // Dismissal records a decision; the run it describes is untouched.
+    assert.equal(fixture.db.prepare('SELECT status FROM runs WHERE id = ?').get(item.runId).status, 'failed');
   } finally {
     await fixture.cleanup();
   }

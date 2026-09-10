@@ -51,6 +51,15 @@ function setup() {
       draftTimeline: async () => {},
       acceptDraft: () => {}
     },
+    inbox: {
+      list: async (projectId) => ({
+        projectId,
+        items: [{ key: 'plan_stale:plan-1', kind: 'plan_stale', title: 'Accepted feature plan has drifted', actions: ['analyze', 'reground', 'convert', 'dismiss'] }],
+        counts: { plan_stale: 1 },
+        stalenessTruncated: false
+      }),
+      dismiss: (projectId, itemKey) => ({ projectId, itemKey, dismissedAt: '2026-01-01 00:00:00' })
+    },
     reviews: { get: () => ({ gates: [], evidence: [], approvals: [] }) },
     dashboard: { summary: () => ({ issues: [], notes: [], gitEvents: [] }) }
   };
@@ -314,6 +323,25 @@ test('feature routes preserve lifecycle and expose planning actions', async () =
     assert.equal(regrounded.status, 201);
     assert.equal(regrounded.body.data.supersedesId, 'plan-1');
     assert.equal(regrounded.body.data.tokenBudget, 1200);
+  } finally { fixture.close(); }
+});
+
+test('the inbox is readable and dismissal is an idempotent mutation', async () => {
+  const fixture = setup();
+  try {
+    const listed = await request(fixture.app).get('/api/v1/projects/1/inbox');
+    assert.equal(listed.status, 200);
+    assert.equal(listed.body.data.items[0].key, 'plan_stale:plan-1');
+    assert.equal(listed.body.data.counts.plan_stale, 1);
+
+    const withoutKey = await request(fixture.app).post('/api/v1/projects/1/inbox/plan_stale%3Aplan-1/dismiss').send({});
+    assert.equal(withoutKey.status, 400);
+    const dismissed = await request(fixture.app)
+      .post('/api/v1/projects/1/inbox/plan_stale%3Aplan-1/dismiss')
+      .set('Idempotency-Key', 'inbox-dismiss-http')
+      .send({});
+    assert.equal(dismissed.status, 201);
+    assert.equal(dismissed.body.data.itemKey, 'plan_stale:plan-1');
   } finally { fixture.close(); }
 });
 

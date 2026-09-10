@@ -383,3 +383,55 @@ test('a run started against a drifted plan keeps its warning on screen', async (
   await page.getByTestId('plan-warnings').getByRole('button', { name: 'Dismiss' }).click();
   await expect(page.getByTestId('plan-warnings')).toHaveCount(0);
 });
+
+test('the planning inbox lists what needs a decision and dismissing clears it', async ({ page, request }) => {
+  const project = await createProject(request, 'browser-inbox', 'Inbox fixture');
+  const item = {
+    key: 'plan_stale:11111111-1111-4111-8111-111111111111',
+    kind: 'plan_stale',
+    title: 'Accepted feature plan has drifted',
+    detail: '1 file this plan was grounded on changed: src/provider.js.',
+    subject: 'Change provider cancellation',
+    route: 'features',
+    planningRequestId: '11111111-1111-4111-8111-111111111111',
+    staleness: { status: 'STALE', changedGroundingFiles: ['src/provider.js'] },
+    actions: ['analyze', 'reground', 'convert', 'dismiss']
+  };
+  let dismissed = false;
+  await page.route(`**/api/v1/projects/${project.id}/inbox`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          projectId: project.id,
+          items: dismissed ? [] : [item],
+          counts: dismissed ? {} : { plan_stale: 1 },
+          stalenessTruncated: false,
+          stalenessCheckLimit: 25
+        },
+        meta: { apiVersion: 'v1' }
+      })
+    });
+  });
+  await page.route(`**/api/v1/projects/${project.id}/inbox/*/dismiss`, async (route) => {
+    dismissed = true;
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { projectId: project.id, itemKey: item.key }, meta: { apiVersion: 'v1' } })
+    });
+  });
+
+  await page.goto('/#/inbox');
+  await page.getByLabel('Active project').selectOption(String(project.id));
+  const row = page.locator(`[data-inbox-item="${item.key}"]`);
+  await expect(row).toContainText('Accepted feature plan has drifted');
+  await expect(row.locator('.badge.staleness.stale')).toBeVisible();
+  await expect(row.getByRole('button', { name: 'Re-ground plan' })).toBeVisible();
+  await expect(row.getByRole('button', { name: 'Convert to issue' })).toBeVisible();
+
+  await row.getByRole('button', { name: 'Dismiss' }).click();
+  await expect(page.locator(`[data-inbox-item="${item.key}"]`)).toHaveCount(0);
+  await expect(page.getByText('Nothing is waiting on you')).toBeVisible();
+});
