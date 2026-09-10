@@ -7,9 +7,6 @@ data/
 test-results/
 playwright-report/
 
-# Internal planning docs, not part of the shipped project
-docs/superpowers/
-
 # Local Claude Code settings and session artifacts (never shared/committed),
 # except .claude/skills/gate/ which is the SKILL.md Gate ships into other projects.
 .claude/*

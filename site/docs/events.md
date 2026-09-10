@@ -32,13 +32,21 @@ The UI subscribes over WebSocket at `/ws?projectId=<id>&after=<sequence>`. On co
 
 | Family | Current types |
 | --- | --- |
-| `project.*` | `project.created`, `project.policy.updated` |
-| `timeline.*` | `timeline.draft.proposed`, `timeline.replaced`, `timeline.node.transitioned` |
-| `agent.run.*` | `agent.run.started`, `agent.run.interrupted` |
+| `project.*` | `project.created`, `project.policy.updated`, `project.provider.updated`, `project.stage.updated`, `project.instructions.updated` |
+| `timeline.*` | `timeline.draft.proposed`, `timeline.replaced`, `timeline.node.transitioned`, `timeline.node.locked`, `timeline.node.unlocked` |
+| `agent.run.*` | `agent.run.started`, `agent.run.interrupted`, `agent.run.review`, `agent.run.failed`, `agent.run.cancelled` |
 | `gate.*` | `gate.evidence.submitted`, `gate.approval.decided` |
+| `feature.*` | `feature.created`, `feature.status.updated` |
+| `planning.*` | `planning.proposed`, `planning.accepted` |
+| `milestone.*` | `milestone.expansion.proposed` |
+| `memory.*` | `memory.index.started`, `memory.index.completed`, `memory.index.failed` |
+| `context.*` | `context.compiled` |
+| `remote.*` | `remote.prs.observed`, `remote.issues.observed` |
 | `issue.*` | `issue.created`, `issue.status.updated` |
 | `note.*` | `note.created` |
 | `git.*` | `git.history.observed` |
+
+Event payloads carry identifiers and counts rather than source excerpts — for example, a `planning.proposed` or `context.compiled` event names its capsule and request id instead of embedding content.
 
 ## Consumer guidance
 

@@ -5,7 +5,7 @@ description: Workflow rules for working with the Gate control plane — use the 
 
 # Gate workflow
 
-- **Use the Gate MCP tools for every Gate operation.** The tool names match the [MCP reference](https://github.com/T-Crypt/GATE/blob/main/docs/mcp.md) — in OpenCode they may surface prefixed with the server name (`gate-mcp_*`).
+- **Use the Gate MCP tools for every Gate operation.** The tool names match the [MCP reference](https://t-crypt.github.io/GATE/docs/mcp/) — in OpenCode they may surface prefixed with the server name (`gate-mcp_*`).
 - **Never hand-edit the `.gate/` mirror.** `project.json`, `timeline.json`, `issues.json`, `notes.json`, `MILESTONES.md`, and `ISSUES.md` are regenerated from the database on every change — an edit made by hand is lost on the next write. Use the tools (or the web UI); the mirror is a read-only orientation snapshot.
 - **Orient cheaply before acting.** Read the `.gate/` mirror or `project_list` and `timeline_get` first to learn the project id, base branch, safety policy, milestones, and where the dependency edges point. It is always fine to start a session that way.
 - **Plan before anything runs.** Ask the human for a goal, then call `timeline_draft` to get a proposed dependency-aware timeline — do not invent or apply one silently. Show the draft and wait.
